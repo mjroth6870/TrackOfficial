@@ -60,7 +60,9 @@ In Firebase: **Authentication → Settings → Authorized domains → Add domain
 
 ### 6. First use
 1. Open the GitHub Pages address and choose **Create account** with your email and a password.
-2. Pick **Meet Director**, then create or import a meet. New meets are shared live automatically.
+   **The first account ever created becomes the admin**, so do this yourself before sharing the address.
+2. Pick **Meet Director**. A new account starts with no meets. Create one or import a meet program;
+   new meets are shared live automatically and belong to your account.
 3. Use **Access** to give each official their QR code. Officials who scan one are signed in as a guest
    and land on their role; meet staff sign in with their own email account.
 
@@ -69,13 +71,29 @@ Replace `index.html` in the repository (**Add file → Upload files**, same name
 GitHub Pages republishes within a couple of minutes. If the rules change, paste the new
 `firestore.rules` into Firebase → Firestore → Rules and publish.
 
+## Accounts and the Admin screen
+Every person who signs in with an email gets an account. On the **Meets** tab, the account card shows your
+name (with **Edit name**), **Sign out**, and for admins an **Admin** button.
+
+The Admin screen lists **all accounts** (search, Export CSV). For each account an admin can:
+- **View meets** — the meets that account owns, active and archived. From there, **Open** a meet on this device,
+  or **Archive** / **Restore** it. An archived meet is read-only for everyone until it's restored.
+- **Suspend** / **Lift suspension** — a suspended account can still sign in and look, but can't change anything
+  or start new meets.
+- **Make admin** / **Remove admin**.
+- See its **Access log**: suspensions, admin changes, meets archived or restored by an admin, and changes it tried
+  to make that were refused.
+
+Deleting accounts or meets isn't done from the app. To remove a login entirely, use Firebase → Authentication → Users.
+
 ## Who can do what (firestore.rules)
-- **Meet staff** (signed in with an email account): see the list of meets, create and delete meets, and everything below.
-- **Guest officials** (signed in from an access code): open and work in the meet named in their code. They can't list
-  other meets or create or delete meets.
-- **Shoe photos:** anyone signed in can view them; only the person who took a photo can remove it.
-- Anyone who has the app's address can create an email account. Which screens a person sees depends on the role
-  picked on their device, so treat the address as something to share with your officials only.
+- **Meet staff** (email accounts): see and manage only the meets they own; open other meets through access codes.
+- **Guest officials** (from an access code): work in the meet named in their code. They can't list, create or delete meets.
+- **Admins**: see every account and meet, suspend accounts, archive and restore any meet, add or remove admins.
+- **Suspended accounts** and **archived meets** can't be changed (admins can still restore them).
+- **Shoe photos:** anyone signed in can view them; only the person who took a photo, or an admin, can remove it.
+- Anyone who has the app's address can create an account, so share the address with your officials only.
+  An admin can suspend any account that shouldn't be there.
 
 ## Limits on the free plan
 Firestore's Spark plan allows 1 GiB of stored data, 50,000 reads and 20,000 writes a day. A shoe photo is about
