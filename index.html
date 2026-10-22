@@ -679,6 +679,49 @@ div.lbl{display:block;font-size:12px;font-weight:700;color:var(--muted);text-tra
 .adm-h{font-size:15px;margin:16px 0 4px;display:flex;align-items:center;gap:8px}
 .count{display:inline-block;min-width:24px;padding:0 8px;border-radius:999px;background:var(--surface-2);border:1px solid var(--line);font-size:13px;text-align:center;font-weight:600}
 
+/* role picker: sized to fit any screen without scrolling */
+.ov.ov-rolepick{padding:max(10px,env(safe-area-inset-top,0px)) max(10px,env(safe-area-inset-right,0px)) max(10px,env(safe-area-inset-bottom,0px)) max(10px,env(safe-area-inset-left,0px))}
+.modal.rolepick{width:min(880px,100%);max-height:calc(100dvh - 20px);overflow:hidden;display:flex;flex-direction:column;gap:clamp(8px,1.6dvh,14px);padding:clamp(14px,2.4vw,24px)}
+.rolepick h2{margin:0;font-size:clamp(20px,3.2vw,26px);line-height:1.15}
+.rp-sub{margin:4px 0 0;color:var(--muted);font-size:14px}
+.rp-groups{display:grid;grid-template-columns:1fr;gap:clamp(6px,1.4dvh,12px);min-height:0}
+.rp-gh{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:0 0 4px}
+.rp-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.rp-grp.g-meet .rp-grid{grid-template-columns:1fr}
+.rp-card{position:relative;display:block;cursor:pointer;min-width:0}
+.rp-card input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer;z-index:1}
+.rp-card span{display:flex;align-items:center;min-height:clamp(38px,5.4dvh,46px);padding:0 10px 0 12px;border:1px solid var(--line);border-left:5px solid var(--line);border-radius:9px;background:var(--surface);font-weight:700;font-size:clamp(14px,1.6vw,16px);line-height:1.15;color:var(--ink)}
+.g-meet .rp-card span{border-left-color:var(--g-meet)} .g-clerk .rp-card span{border-left-color:var(--g-clerk)} .g-ump .rp-card span{border-left-color:var(--flag)}
+.rp-card:hover span{background:var(--surface-2)}
+.rp-card input:checked+span{background:var(--navy);border-color:var(--navy);color:#fff}
+.g-meet .rp-card input:checked+span{border-left-color:var(--g-meet)} .g-clerk .rp-card input:checked+span{border-left-color:var(--g-clerk)} .g-ump .rp-card input:checked+span{border-left-color:var(--flag)}
+.rp-card input:focus-visible+span{outline:2px solid var(--focus);outline-offset:2px}
+.rp-foot{display:flex;flex-direction:column;gap:8px}
+.rp-hint{margin:0;font-size:14px;color:var(--muted);min-height:2.6em;line-height:1.3}
+.rp-who{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 10px;align-items:center}
+.rp-who:empty{display:none}
+.rp-who .lbl{margin:0}
+.rolepick > .row{margin-top:0!important;flex-wrap:nowrap}
+.rolepick > .row .btn{min-height:44px}
+@media (min-width:700px){
+  .rp-groups{grid-template-columns:minmax(150px,.7fr) 1fr 1fr}
+  .rp-grid{grid-template-columns:1fr}
+  .rp-grp.g-ump .rp-grid,.rp-grp.g-clerk .rp-grid{grid-template-columns:1fr}
+  .rp-hint{min-height:0}
+}
+@media (max-width:420px){ .rp-who{grid-template-columns:1fr} .rolepick > .row .btn{flex:1} }
+@media (max-height:720px){ .rp-sub{display:none} }
+@media (max-height:600px){ .rp-gh{margin-bottom:2px} .rp-hint{min-height:0;font-size:13px} }
+.modal.rolepick > *{flex-shrink:0}
+@media (min-width:560px) and (max-height:560px){
+  .rp-groups{grid-template-columns:minmax(120px,.55fr) 1fr 1fr}
+  .rp-sub{display:none} .rp-hint{min-height:0;font-size:13px} .rp-who{grid-template-columns:auto minmax(0,1fr)}
+  .rp-grp.g-clerk .rp-grid,.rp-grp.g-ump .rp-grid{grid-template-columns:1fr 1fr}
+  .rp-card span{min-height:36px;font-size:14px;padding:0 6px 0 9px}
+  .modal.rolepick{gap:8px;padding:14px 18px}
+  .rolepick h2{font-size:20px}
+}
+
 </style>
 <script>
 /* Firebase backend for the hosted copy (GitHub Pages). Inside Claude the platform supplies shared data,
@@ -3148,15 +3191,16 @@ function roleChip(){
 function roleDialog(firstRun){
   var cur = UI.role, d = Ump.offData(), n = Math.max(1, Math.min(40, d.umpireCount || 1));
   var groups = ['meet','clerk','ump'];
-  var html = '<h2>' + (firstRun ? 'What is your job at this meet?' : 'Change role') + '</h2>' +
-    '<p class="muted" style="margin-top:0">Each role sees only its own work. Events, heats and athletes come from the same meet setup, so clerks\' check-ins show up for umpires straight away.</p>' +
+  var html = '<div class="rp-head"><h2 id="rpT">' + (firstRun ? 'What is your job at this meet?' : 'Change role') + '</h2>' +
+    '<p class="rp-sub">Each role sees only its own work. Everyone shares the same events, heats and athletes.</p></div>' +
+    '<div class="rp-groups" role="radiogroup" aria-labelledby="rpT">' +
     groups.map(function(g){
-      return '<div class="rgrp"><div class="rgrp-h">' + esc(GROUP_LABEL[g]) + '</div><div class="rgrid">' +
+      return '<div class="rp-grp g-' + g + '"><div class="rp-gh">' + esc(GROUP_LABEL[g]) + '</div><div class="rp-grid">' +
         Object.keys(ROLE_DEFS).filter(function(k){ return (ROLE_DEFS[k].pick || ROLE_DEFS[k].group) === g && (k !== 'assistant' || d.useAssistant || cur === 'assistant'); }).map(function(k){
-          return '<label class="rcard g-' + g + '"><input type="radio" name="rPick" value="' + k + '"' + (k === cur ? ' checked' : '') + '><span><b>' + esc(ROLE_DEFS[k].label) + '</b><small>' + esc(ROLE_DEFS[k].hint) + '</small></span></label>';
+          return '<label class="rp-card"><input type="radio" name="rPick" value="' + k + '"' + (k === cur ? ' checked' : '') + ' aria-describedby="rpHint"><span>' + esc(ROLE_DEFS[k].label) + '</span></label>';
         }).join('') + '</div></div>';
-    }).join('') +
-    '<div id="rWho"></div>';
+    }).join('') + '</div>' +
+    '<div class="rp-foot"><p class="rp-hint" id="rpHint" aria-live="polite"></p><div id="rWho" class="rp-who"></div></div>';
   dialog(html, 'Use this role', 'primary', function(){
     var r = ($('input[name="rPick"]:checked') || {}).value; if (!r){ toast('Pick a role'); return false; }
     var w = $('#rWhoSel'), pos = w ? w.value : '';
@@ -3164,21 +3208,26 @@ function roleDialog(firstRun){
     setRole(r, pos); render(); window.scrollTo(0, 0);
     toast('This device is now ' + ROLE_DEFS[r].label + (posName(pos) ? ' · ' + posName(pos) : /^u\d+$/.test(pos) ? ' ' + pos.slice(1) : ''));
   });
-  var box = $('#dlg .modal'); box.classList.add('wide2');
+  var box = $('#dlg .modal'); box.classList.add('rolepick'); box.closest('.ov').classList.add('ov-rolepick');
   function who(){
-    var r = ($('input[name="rPick"]:checked') || {}).value, el = $('#rWho'), p = myPos(), opts = '';
-    if (!r || !M){ el.innerHTML = ''; return; }
+    var r = ($('input[name="rPick"]:checked') || {}).value, el = $('#rWho'), hint = $('#rpHint'), p = myPos(), opts = '', extra = '';
+    if (!r){ hint.textContent = 'Pick the job you\'re doing at this meet.'; el.innerHTML = ''; return; }
+    if (!M){ el.innerHTML = ''; hint.textContent = ROLE_DEFS[r].hint + '.'; return; }
     if (r === 'umpire'){
       for (var i = 1; i <= n; i++){ var nm = ((d.umpires['u' + i] || {}).name) || ''; opts += '<option value="u' + i + '"' + (p === 'u' + i ? ' selected' : '') + '>Umpire ' + i + (nm ? ' – ' + esc(nm) : '') + '</option>'; }
-      el.innerHTML = '<label class="lbl" for="rWhoSel" style="margin-top:12px">Which umpire are you?</label><select class="f" id="rWhoSel"><option value="">Not set</option>' + opts + '</select><p class="hint">Your number fills in your post on every report.</p>';
+      el.innerHTML = '<label class="lbl" for="rWhoSel">Which umpire are you?</label><select class="f" id="rWhoSel"><option value="">Not set</option>' + opts + '</select>';
+      extra = ' Your number fills in your post on every report.';
     } else if (ROLE_DEFS[r].group === 'clerk' || r === 'shoeCheck'){
       var pre = r === 'headClerk' ? 'hc' : r === 'clerk' ? 'ck' : r === 'shoeCheck' ? 'sc' : 'lc';
       (M.officials[r] || []).forEach(function(x, i){ if ((x || '').trim()) opts += '<option value="' + pre + (i + 1) + '"' + (p === pre + (i + 1) ? ' selected' : '') + '>' + esc(x) + '</option>'; });
-      el.innerHTML = opts ? '<label class="lbl" for="rWhoSel" style="margin-top:12px">Your name</label><select class="f" id="rWhoSel"><option value="">' + (r === 'lineClerk' ? 'Show every heat' : 'Not set') + '</option>' + opts + '</select><p class="hint">' + (r === 'lineClerk' ? 'The Start Line then shows only your heats.' : 'Live Calls then shows the events you\'re assigned to first.') + '</p>' : '<p class="hint">Names for this role are added under Setup → Officials.</p>';
+      el.innerHTML = opts ? '<label class="lbl" for="rWhoSel">Your name</label><select class="f" id="rWhoSel"><option value="">' + (r === 'lineClerk' ? 'Show every heat' : 'Not set') + '</option>' + opts + '</select>' : '';
+      extra = !opts ? ' Names for this role are added under Setup → Officials.' : r === 'lineClerk' ? ' The Start Line then shows only your heats.' : r === 'shoeCheck' ? '' : ' Live Calls then shows your events first.';
     } else el.innerHTML = '';
+    hint.textContent = ROLE_DEFS[r].hint + '.' + extra;
   }
   box.addEventListener('change', function(e){ if (e.target.name === 'rPick') who(); });
   who();
+  var c = $('input[name="rPick"]:checked', box) || $('input[name="rPick"]', box); if (c) c.focus({ preventScroll:true });
 }
 
 /* =====================================================================
