@@ -896,6 +896,20 @@ header.top.stack{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"l
 .touts{display:flex;flex-wrap:wrap;gap:4px 12px;padding:6px 14px 0;font-size:14px;color:var(--muted)}
 .touts>b{color:var(--ink)}
 
+/* shoe check: a result for each event */
+.shoe-evpick{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+.sep-row{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.sep-ev{display:flex;flex-direction:column;min-width:0}
+.sep-ev small{color:var(--muted);font-size:12px}
+.pfpick .pf-na{color:var(--muted)}
+.sep-res{margin:2px 0}
+.pf.pf-mixed{background:#B7791F;color:#fff}
+.shoe-ph-l small{display:block;font-size:11px;opacity:.85;white-space:normal}
+.sep-row .pfpick{flex:0 0 auto;gap:6px}
+.sep-row .pfpick label{flex:0 0 auto}
+.sep-row .pfpick span{padding:8px 12px;font-size:15px;min-width:58px}
+.pfpick input:checked+span.pf-na{background:var(--surface);color:var(--ink);border-color:var(--ink)}
+
 </style>
 <script>
 /* Firebase backend for the hosted copy (GitHub Pages). Inside Claude the platform supplies shared data,
@@ -958,7 +972,8 @@ header.top.stack{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"l
   }
   function wrapDoc(s){ return { id:s.id, exists:s.exists(), data:function(){ return s.data(); }, metadata:s.metadata || {} }; }
   function wrapQuery(qs){ var docs = qs.docs.map(wrapDoc); return { docs:docs, size:docs.length, metadata:qs.metadata || {}, docChanges:function(){ return qs.docChanges().map(function(c){ return { type:c.type, doc:wrapDoc(c.doc) }; }); } }; }
-  function clean(d){ return JSON.parse(JSON.stringify(d)); }
+  /* A document with an "expires" date also gets a real timestamp, expireAt, so a Firestore TTL policy can delete it on schedule. */
+  function clean(d){ var c = JSON.parse(JSON.stringify(d)); if (c && typeof c.expires === 'string' && c.expires){ var t = new Date(c.expires); if (!isNaN(t)) c.expireAt = t; } return c; }
   function listen(mk, wrap, cb, err){
     var un = null, dead = false;
     signedIn().then(function(a){ if (dead) return; un = a.sdk.fs.onSnapshot(mk(a), function(s){ cb(wrap(s)); }, function(e){ if (err) err(mapErr(e)); }); }, function(e){ if (err) err(mapErr(e)); });
@@ -1013,13 +1028,14 @@ header.top.stack{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"l
   }
   var photoCache = {};
   var assetsApi = {
-    upload:function(blob){
+    upload:function(blob, opts){
       return blobToDataUrl(blob).then(async function(d){
         var tries = [[1600, .8], [1300, .72], [1100, .65], [900, .6], [700, .55]];
         for (var i = 0; d.length > 900000 && i < tries.length; i++) d = await shrinkDataUrl(d, tries[i][0], tries[i][1]);
         if (d.length > 900000){ var e = new Error('too large'); e.code = 'too_large'; throw e; }
         var id = autoId(), uid = (await userApi.id());
-        await docRef('photos/' + id).set({ data:d, by:uid, at:new Date().toISOString() });
+        var doc = { data:d, by:uid, at:new Date().toISOString() }; if (opts && opts.expires) doc.expires = opts.expires;
+        await docRef('photos/' + id).set(doc);
         photoCache[id] = d;
         return { id:id, url:d, sizeBytes:d.length, contentType:'image/jpeg' };
       });
@@ -2310,7 +2326,7 @@ var Sync = (function(){
   function plain(o){ return JSON.parse(JSON.stringify(o)); }
   function base(id){ return 'meets/' + id; }
 
-  function metaDef(m){ return { multi:m.multi || { n:0, coords:[] }, clerking:m.clerking !== false, owner:m.owner || null, ownerName:m.ownerName || '', archived:!!m.archived, archivedAt:m.archivedAt || '', name:m.name || '', templates:m.templates, officials:m.officials, notes:m.notes, dayOrder:m.days.map(function(d){ return d.id; }), mapOrder:m.maps.map(function(x){ return x.id; }) }; }
+  function metaDef(m){ return { shoeKeep:+m.shoeKeep || 0, multi:m.multi || { n:0, coords:[] }, clerking:m.clerking !== false, owner:m.owner || null, ownerName:m.ownerName || '', archived:!!m.archived, archivedAt:m.archivedAt || '', name:m.name || '', templates:m.templates, officials:m.officials, notes:m.notes, dayOrder:m.days.map(function(d){ return d.id; }), mapOrder:m.maps.map(function(x){ return x.id; }) }; }
   function dayDef(d){ return { name:d.name, date:d.date || '', defaultTemplateId:d.defaultTemplateId || null, mapId:d.mapId || null, events:d.events }; }
   function mapDef(x){ return { name:x.name, markers:x.markers || {}, src:x.src }; }
   function defsOf(m){ var o = { meta:metaDef(m) }; m.days.forEach(function(d){ o['day:' + d.id] = dayDef(d); }); m.maps.forEach(function(x){ o['map:' + x.id] = mapDef(x); }); return o; }
@@ -2410,6 +2426,7 @@ var Sync = (function(){
     if (!data || !(data.updated > (s.dt.meta || 0))) return false;
     if (typeof data.clerking === 'boolean') m.clerking = data.clerking;
     if (data.multi) m.multi = data.multi;
+    if (data.shoeKeep != null) m.shoeKeep = +data.shoeKeep || 0;
     if (data.owner) { m.owner = data.owner; m.ownerName = data.ownerName || ''; } m.archived = data.archived === true; m.archivedAt = data.archivedAt || '';
     m.name = data.name || m.name; if (data.templates) m.templates = data.templates; if (data.officials) m.officials = data.officials; if (data.notes) m.notes = data.notes;
     if (data.dayOrder){
@@ -3044,7 +3061,7 @@ function renderSetup(main){
         '<button class="btn sm" data-cadd style="margin-top:8px">+ Add call</button></div>';
     }).join('') + '<button class="btn primary" id="addTpl">+ Add call scheme</button></div>');
   /* Referee and meet director: Meet, Data, Rulebook. Head clerk: Meet, Data, Alerts, Call schemes, Clerking officials. One full-width row each. */
-  if (role === 'referee' || role === 'director'){ main.innerHTML = '<div class="grid2 rows">' + meetC + dataC + Ump.rulesSection() + (role === 'director' && !clerkOn() ? officialsCard(['lineClerk', 'shoeCheck']) : '') + (role === 'director' ? ceSetupCard() : '') + '</div>'; return; }
+  if (role === 'referee' || role === 'director'){ main.innerHTML = '<div class="grid2 rows">' + meetC + dataC + Ump.rulesSection() + (role === 'director' && !clerkOn() ? officialsCard(['lineClerk', 'shoeCheck']) : '') + (role === 'director' ? shoeKeepCard() + ceSetupCard() : '') + '</div>'; return; }
   if (role === 'headClerk'){ main.innerHTML = '<div class="grid2 rows">' + meetC + dataC + alertsC + schemesC + officialsCard() + '</div>'; return; }
   main.innerHTML = '<div class="grid2">' + (cM ? '' : '<div class="card pad" style="grid-column:1/-1"><b>Meet setup is handled by the meet director, head clerk or referee.</b> <span class="muted">Below are the umpiring settings for your role.</span></div>') +
     (cC ? officialsCard() : '') + (cM ? '<div class="stack">' + meetC + Ump.rulesSection() + '</div>' : '') + alertsC + Ump.setupCards(cM) + schemesC + dataC + '</div>';
@@ -3221,6 +3238,7 @@ main.addEventListener('change', function(e){
     applyCount(); return;
   }
   if (t.id === 'mName'){ M.name = t.value.trim(); save(); render(); return; }
+  if (t.id === 'shoeKeep'){ M.shoeKeep = +t.value || 0; save(); toast(M.shoeKeep ? 'Shoe photos will be deleted ' + M.shoeKeep + (M.shoeKeep === 1 ? ' day' : ' days') + ' after they\'re taken' : 'Shoe photos are kept until someone removes them'); return; }
   if (ceSetupChange(t) || ceChange(t)) return;
   if (t.id === 'mClerk'){ M.clerking = t.checked; save(); render(); toast(t.checked ? 'Clerking is on for this meet' : 'Clerking is off. Umpiring and shoe check carry on without it.'); return; }
   if (t.dataset.df){ var d2 = day(t.closest('[data-day]').dataset.day); d2[t.dataset.df] = t.value || (t.dataset.df === 'mapId' ? null : ''); save(); render(); return; }
@@ -3696,23 +3714,24 @@ function shoeIndex(){
 function shoeResults(){
   var q = shoeNorm(UI.shoeQ);
   if (q.length < 2) return '<div class="card empty">Type at least two letters of an athlete\'s name, school or bib number.</div>';
-  var hits = shoeIndex().filter(function(a){ return [a.name, a.team, a.bib].join(' ').toLowerCase().indexOf(q) >= 0; })
+  var hits = shoeIndex().map(function(a){ a.events = a.events.filter(function(x){ return Ump.shoeCheckable(x.e); }); return a; }).filter(function(a){ return a.events.length && [a.name, a.team, a.bib].join(' ').toLowerCase().indexOf(q) >= 0; })
     .sort(function(a, b){ return a.name.localeCompare(b.name); });
   if (!hits.length) return '<div class="card empty">No athlete entered in ' + esc(M.name) + ' matches “' + esc(UI.shoeQ) + '”.</div>';
   var can = Ump.canPhoto(); UI.shoeHits = {};
   return '<p class="muted" style="margin:0 0 8px;font-size:14px">' + hits.length + (hits.length === 1 ? ' athlete' : ' athletes') + (hits.length > 50 ? ' · showing the first 50' : '') + '</p><div class="qlist">' + hits.slice(0, 50).map(function(a, i){
     a.key = shoeNorm(a.name) + '|' + shoeNorm(a.team); UI.shoeHits['h' + i] = a;
-    var ph = Ump.shoesFor(a.key);
+    var ph = Ump.shoesFor(a.key), evRes = {};
+    ph.slice().reverse().forEach(function(p){ (p.events || []).forEach(function(r){ evRes[r.id] = r.result; }); });
     return '<div class="card shoecard"><div class="shoe-h"><b class="athn">' + esc(a.name) + '</b>' + (a.bib ? '<span class="shoe-bib num">#' + esc(a.bib) + '</span>' : '') + (can ? '<button class="btn sm primary shoe-add" data-ushoeadd="h' + i + '">＋ Add shoe photo</button>' : '') + '</div>' +
       '<div class="shoe-team">' + esc(a.team || 'No school listed') + '</div>' + Ump.shoeThumbs(ph) +
-      '<ul class="shoe-evs">' + a.events.map(function(x){ return '<li><span class="shoe-when num">' + esc(x.d.name) + ' · ' + fmt(x.e.start) + '</span><span class="shoe-ev"><b>' + esc(evTitle(x.e)) + '</b>' + (x.relay ? ' <span class="muted">relay</span>' : '') + '<small>' + esc(secName(x.s)) + ' · Lane ' + esc(x.l.lane) + '</small></span></li>'; }).join('') + '</ul></div>';
+      '<ul class="shoe-evs">' + a.events.map(function(x){ return '<li><span class="shoe-when num">' + esc(x.d.name) + ' · ' + fmt(x.e.start) + '</span><span class="shoe-ev"><b>' + esc(evTitle(x.e)) + '</b>' + (evRes[x.e.id] ? ' <b class="pf pf-' + evRes[x.e.id] + '">' + (evRes[x.e.id] === 'fail' ? 'FAIL' : 'PASS') + '</b>' : '') + (x.relay ? ' <span class="muted">relay</span>' : '') + '<small>' + esc(secName(x.s)) + ' · Lane ' + esc(x.l.lane) + '</small></span></li>'; }).join('') + '</ul></div>';
   }).join('') + '</div>';
 }
 function renderShoes(main){
   var any = M.days.some(function(d){ return ciEvents(d).length; });
   if (!any){ main.innerHTML = '<div class="card empty"><b>No athletes entered yet.</b><br>Athletes appear here once the meet program with start lists is imported under Setup.</div>'; return; }
   main.innerHTML = welcomeBanner() + (Ump.live() ? '' : Ump.shareNote('Shoe photos are saved with the shared meet so the chief umpire and referee can see them.')) + '<div class="card pad shoe-top"><h2>Shoe check</h2><label class="lbl" for="shoeQ">Find an athlete</label><input class="f" type="search" id="shoeQ" placeholder="Name, school or bib" value="' + esc(UI.shoeQ || '') + '" autocomplete="off">' +
-    '<p class="hint">Searches every athlete entered in the meet, across all days.' + (Ump.canPhoto() ? ' Use <b>Add shoe photo</b> to take a picture, label it and mark it pass or fail.' : '') + '</p></div>' + shoePhotoNote() + '<div id="shoeBody" style="margin-top:12px">' + shoeResults() + '</div>';
+    '<p class="hint">Searches every athlete entered in the meet, across all days. Shot put, discus, hammer, weight throw and super weight throw don\'t need a shoe check, so they\'re left out.' + (Ump.canPhoto() ? ' Use <b>Add shoe photo</b> to take a picture, label it and mark it pass or fail.' : '') + '</p></div>' + shoePhotoNote() + '<div id="shoeBody" style="margin-top:12px">' + shoeResults() + '</div>';
   var i = $('#shoeQ'); if (i && !UI.shoeQ) i.focus();
 }
 
@@ -4002,6 +4021,14 @@ function ceChange(t){
   if (k === 'start'){ f.e.start = v; f.d.events.sort(function(a, b){ return (a.start == null ? 1e9 : a.start) - (b.start == null ? 1e9 : b.start); }); toast(evTitle(f.e) + (v == null ? ': start time cleared' : ' now starts at ' + fmt(v)) + '. Umpires see the change.'); }
   else { var r = f.e.ceRun = f.e.ceRun || {}; if (v == null) delete r[k.slice(4)]; else r[k.slice(4)] = v; }
   save(); var y = window.scrollY; renderCE($('#main')); window.scrollTo(0, y); return true;
+}
+
+/* ---------- shoe photo retention (meet director) ---------- */
+function shoeKeepCard(){
+  var k = +M.shoeKeep || 0;
+  return '<div class="card pad" id="shoeKeepCard"><h2>Shoe check photos</h2>' +
+    '<label class="row" style="gap:8px;margin:0 0 6px">Delete photos <select class="f" id="shoeKeep" style="width:auto">' + [[0, 'Never — keep until removed'], [1, '1 day after they\'re taken'], [3, '3 days after'], [7, '7 days after'], [14, '14 days after'], [30, '30 days after'], [90, '90 days after']].map(function(o){ return '<option value="' + o[0] + '"' + (o[0] === k ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></label>' +
+    '<p class="hint" style="margin:0">Old photos are cleared to save space. Shot put, discus, hammer, weight throw and super weight throw aren\'t shoe-checked. ' + (window.__toStandalone ? 'Firebase deletes expired photos on its own once its TTL policy is set up (see the README); the app also clears them when officials open the meet.' : 'Expired photos are cleared the next time an official opens the meet.') + '</p></div>';
 }
 
 /* =====================================================================
@@ -4355,7 +4382,7 @@ function attach(_db, id){
     S.calls = q.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
     soft(); refreshNames();
   }, err));
-  subs.push(db.collection(P('shoes')).onSnapshot(function(q){ if (mine !== meetId) return; S.shoes = q.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); }); soft(); }, err));
+  subs.push(db.collection(P('shoes')).onSnapshot(function(q){ if (mine !== meetId) return; S.shoes = q.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); }); soft(); setTimeout(purgeShoes, 1500); }, err));
   subs.push(db.collection(P('clears')).onSnapshot(function(q){ if (mine !== meetId) return; S.clears = q.docs.map(function(d){ return d.data(); }); soft(); }, err));
   subs.push(db.collection(P('finals')).onSnapshot(function(q){ if (mine !== meetId) return; S.finals = {}; q.docs.forEach(function(d){ var x = d.data(); if (x.final) S.finals[x.evId] = x; }); soft(); }, err));
   subs.push(db.doc(P('config/rules')).onSnapshot(function(s){ if (mine !== meetId) return; var d = s.exists ? s.data() : {}; S.rules = d.items ? d.items.map(normRule) : null; S.book = d.book || null; if (!S.rulesDirty) S.draft = null; soft(); }, err));
@@ -4863,13 +4890,31 @@ function setupCards(rulesPlaced){
 var assets = null;
 function initAssets(){ try{ if (window.claude && claude.use) claude.use('assets').then(function(a){ assets = a; soft(); }).catch(function(){}); }catch(e){} }
 function canPhoto(){ return cw() && !!assets; }
+/* Throws that don't need a shoe check. */
+var SHOE_SKIP_RE = /\b(shot|discus|hammer)\b|\bweight\s*throw|\bsuper\s*weight|\b(SP|DT|HT|WT|SWT)\b/i;
+function shoeCheckable(e){ return !SHOE_SKIP_RE.test((e.fullName || '') + ' ' + (e.name || '')); }
+function pfWord(r){ return r === 'fail' ? 'FAIL' : r === 'mixed' ? 'MIXED' : 'PASS'; }
+/* Older photos have one result; newer ones carry a result for each event the shoe was checked for. */
+function shoeEvResults(x){ return x.events && x.events.length ? x.events : null; }
+function shoeKeepDays(){ return (M && +M.shoeKeep) || 0; }
+var purged = {};
+function purgeShoes(){
+  var keep = shoeKeepDays(); if (!keep || !cw()) return;
+  var cut = Date.now() - keep * 864e5;
+  S.shoes.forEach(function(x){
+    if (purged[x.id] || !x.at || new Date(x.at).getTime() > cut) return;
+    purged[x.id] = 1;
+    db.doc(P('shoes/' + x.id)).delete().catch(function(){});
+    if (assets && x.assetId) assets.delete(x.assetId).catch(function(){});
+  });
+}
 function shoesFor(key){ return S.shoes.filter(function(x){ return x.athKey === key; }).sort(function(a, b){ return (b.at || '').localeCompare(a.at || ''); }); }
 function shoeImgUrl(x){ return '/_blob/' + x.assetId; }
 /* Inside Claude a stored photo is served at /_blob/<id>; the hosted copy fills <img data-photo> from Firestore. */
 function shoeImgAttr(x){ return window.__toStandalone ? 'data-photo="' + esc(x.assetId) + '"' : 'src="' + esc(shoeImgUrl(x)) + '"'; }
 function shoeThumbs(list){
   if (!list.length) return '';
-  return '<div class="shoe-photos">' + list.map(function(x){ return '<button class="shoe-ph" data-ushoeview="' + x.id + '"><img ' + shoeImgAttr(x) + ' alt="' + esc(x.label) + '" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{className:\'shoe-ph-miss\',textContent:\'Photo unavailable\'}))"><span class="shoe-ph-l"><b class="pf pf-' + x.result + '">' + (x.result === 'fail' ? 'FAIL' : 'PASS') + '</b> ' + esc(x.label) + '</span></button>'; }).join('') + '</div>';
+  return '<div class="shoe-photos">' + list.map(function(x){ return '<button class="shoe-ph" data-ushoeview="' + x.id + '"><img ' + shoeImgAttr(x) + ' alt="' + esc(x.label) + '" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{className:\'shoe-ph-miss\',textContent:\'Photo unavailable\'}))"><span class="shoe-ph-l"><b class="pf pf-' + x.result + '">' + pfWord(x.result) + '</b> ' + esc(x.label) + (shoeEvResults(x) ? '<small>' + shoeEvResults(x).map(function(r){ return esc(r.name) + ' ' + (r.result === 'fail' ? '✗' : '✓'); }).join(' · ') + '</small>' : '') + '</span></button>'; }).join('') + '</div>';
 }
 function loadImage(file){
   return new Promise(function(ok, no){ var url = URL.createObjectURL(file), img = new Image(); img.onload = function(){ ok({ img:img, url:url }); }; img.onerror = function(){ URL.revokeObjectURL(url); no(new Error('unreadable')); }; img.src = url; });
@@ -4880,9 +4925,9 @@ function stampPhoto(img, label, result, sub){
   var band = Math.max(64, Math.round(Math.min(w, h) * 0.13)), cv = document.createElement('canvas'); cv.width = w; cv.height = h + band;
   var g = cv.getContext('2d'); g.fillStyle = '#0E2A47'; g.fillRect(0, 0, cv.width, cv.height); g.drawImage(img, 0, 0, w, h);
   var pad = Math.round(band * 0.22), big = Math.round(band * 0.36), small = Math.round(band * 0.22);
-  var badge = result === 'fail' ? 'FAIL' : 'PASS';
+  var badge = pfWord(result);
   g.font = '800 ' + big + 'px system-ui,-apple-system,Segoe UI,sans-serif'; var bw = g.measureText(badge).width + pad * 2;
-  g.fillStyle = result === 'fail' ? '#C23F37' : '#23774D'; g.fillRect(w - bw - pad, h + pad, bw, band - pad * 2);
+  g.fillStyle = result === 'fail' ? '#C23F37' : result === 'mixed' ? '#B7791F' : '#23774D'; g.fillRect(w - bw - pad, h + pad, bw, band - pad * 2);
   g.fillStyle = '#fff'; g.textBaseline = 'middle'; g.fillText(badge, w - bw, h + band / 2);
   var room = w - bw - pad * 3, fit = function(t, f){ g.font = f; while (t.length > 1 && g.measureText(t).width > room) t = t.slice(0, -2) + '…'; return t; };
   g.fillText(fit(label, '700 ' + big + 'px system-ui,-apple-system,Segoe UI,sans-serif'), pad, h + band * 0.38);
@@ -4899,36 +4944,52 @@ function openShoeAdd(ath){
   fi.click();
 }
 function shoeSheet(ath, pic){
+  /* One row per event the athlete is entered in (throws excluded): the shoe passes or fails for each one it's checked for. */
+  var evs = [], seen = {};
+  (ath.events || []).forEach(function(x){ if (!shoeCheckable(x.e) || seen[x.e.id]) return; seen[x.e.id] = 1; evs.push(x); });
+  var only = evs.length === 1;
   openSheet('<div class="sh-top"><div><div class="muted mono-cap">SHOE CHECK</div><h2>' + esc(ath.name) + '</h2><div class="muted">' + esc([ath.team, ath.bib ? '#' + ath.bib : ''].filter(Boolean).join(' · ')) + '</div></div><button class="x" data-close aria-label="Close">×</button></div>' +
     '<img class="shoe-prev" src="' + pic.url + '" alt="Photo to save">' +
     '<form id="shoeForm" class="box" style="background:transparent;padding:0">' +
     '<label class="lbl" for="shoeLabel">Label for this shoe</label><input class="f" id="shoeLabel" maxlength="80" placeholder="e.g. Left spike – Nike Ja Fly 4" autocomplete="off">' +
-    '<div class="lbl" style="margin-top:6px">Result</div><div class="pfpick" role="radiogroup" aria-label="Result"><label><input type="radio" name="shoeRes" value="pass"><span class="pf-pass">Pass</span></label><label><input type="radio" name="shoeRes" value="fail"><span class="pf-fail">Fail</span></label></div>' +
-    '<p class="hint">The label and result are printed on the photo and saved with ' + esc(ath.name) + '. The chief umpire, chief\'s assistant and referee see it.</p>' +
+    '<div class="lbl" style="margin-top:6px">' + (only ? 'Result' : 'Result for each event this shoe is worn in') + '</div>' +
+    (evs.length ? '<div class="shoe-evpick">' + evs.map(function(x, i){
+      return '<div class="sep-row" data-sev="' + i + '"><span class="sep-ev"><b>' + esc(evTitle(x.e)) + '</b><small>' + esc(x.d.name) + ' · ' + fmt(x.e.start) + '</small></span><span class="pfpick" role="radiogroup" aria-label="' + esc(evTitle(x.e)) + '">' +
+        (only ? '' : '<label><input type="radio" name="sev' + i + '" value=""' + ' checked><span class="pf-na">N/A</span></label>') +
+        '<label><input type="radio" name="sev' + i + '" value="pass"><span class="pf-pass">Pass</span></label><label><input type="radio" name="sev' + i + '" value="fail"><span class="pf-fail">Fail</span></label></span></div>';
+    }).join('') + '</div>' : '<div class="pfpick" role="radiogroup" aria-label="Result"><label><input type="radio" name="shoeRes" value="pass"><span class="pf-pass">Pass</span></label><label><input type="radio" name="shoeRes" value="fail"><span class="pf-fail">Fail</span></label></div>') +
+    '<p class="hint">The label and results are printed on the photo and saved with ' + esc(ath.name) + '. The chief umpire, chief\'s assistant and referee see it.' + (shoeKeepDays() ? ' Photos are deleted ' + shoeKeepDays() + (shoeKeepDays() === 1 ? ' day' : ' days') + ' after they\'re taken.' : '') + '</p>' +
     '<div class="err" id="shoeErr" hidden></div>' +
     '<div class="actions"><button type="button" class="btn" data-close>Cancel</button><button class="btn primary" type="submit">Save photo</button></div></form>');
   var lb = $('#shoeLabel'); if (lb) lb.focus();
   $('#shoeForm').addEventListener('submit', function(ev){
     ev.preventDefault();
-    var label = $('#shoeLabel').value.trim(), res = ($('input[name=shoeRes]:checked') || {}).value, er = $('#shoeErr'), btn = $('#shoeForm button[type=submit]');
+    var label = $('#shoeLabel').value.trim(), er = $('#shoeErr'), btn = $('#shoeForm button[type=submit]'), picks = [], res;
+    if (evs.length){
+      evs.forEach(function(x, i){ var v = ($('input[name=sev' + i + ']:checked') || {}).value; if (v) picks.push({ id:x.e.id, name:evTitle(x.e), day:x.d.name, result:v }); });
+      res = !picks.length ? '' : picks.every(function(p){ return p.result === 'fail'; }) ? 'fail' : picks.every(function(p){ return p.result === 'pass'; }) ? 'pass' : 'mixed';
+    } else res = ($('input[name=shoeRes]:checked') || {}).value;
     if (!label){ er.hidden = false; er.textContent = 'Add a label that identifies the shoe.'; return; }
-    if (!res){ er.hidden = false; er.textContent = 'Mark the shoe as Pass or Fail.'; return; }
+    if (!res){ er.hidden = false; er.textContent = evs.length > 1 ? 'Mark Pass or Fail for at least one event.' : 'Mark the shoe as Pass or Fail.'; return; }
     btn.disabled = true; btn.textContent = 'Saving…';
-    var now = new Date(), who = posName(myPos()) || 'Shoe Check';
-    stampPhoto(pic.img, label, res, ath.name + (ath.team ? ' · ' + ath.team : '') + ' · ' + who + ' · ' + now.toLocaleString([], { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' })).then(function(blob){
-      return assets.upload(blob, { type:'image/jpeg' });
+    var now = new Date(), who = posName(myPos()) || 'Shoe Check', keep = shoeKeepDays(), expires = keep ? new Date(now.getTime() + keep * 864e5).toISOString() : '';
+    var sub = (picks.length > 1 || res === 'mixed' ? picks.map(function(p){ return p.name + ' ' + (p.result === 'fail' ? 'FAIL' : 'PASS'); }).join(' · ') + ' · ' : picks.length ? picks[0].name + ' · ' : '') + ath.name + ' · ' + who + ' · ' + now.toLocaleString([], { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' });
+    stampPhoto(pic.img, label, res, sub).then(function(blob){
+      return assets.upload(blob, expires ? { type:'image/jpeg', expires:expires } : { type:'image/jpeg' });
     }).then(function(up){
-      return db.collection(P('shoes')).add({ athKey:ath.key, name:ath.name, team:ath.team || '', bib:ath.bib || '', label:label, result:res, assetId:up.id, by:meId, byPos:myPos() || '', byName:who, at:now.toISOString() });
-    }).then(function(){ URL.revokeObjectURL(pic.url); closeSheet(); toast((res === 'fail' ? 'Fail' : 'Pass') + ' saved for ' + ath.name); })
+      var rec = { athKey:ath.key, name:ath.name, team:ath.team || '', bib:ath.bib || '', label:label, result:res, events:picks, assetId:up.id, by:meId, byPos:myPos() || '', byName:who, at:now.toISOString() };
+      if (expires) rec.expires = expires;
+      return db.collection(P('shoes')).add(rec);
+    }).then(function(){ URL.revokeObjectURL(pic.url); closeSheet(); toast(pfWord(res).charAt(0) + pfWord(res).slice(1).toLowerCase() + ' saved for ' + ath.name); })
     .catch(function(e){ btn.disabled = false; btn.textContent = 'Save photo'; er.hidden = false;
-      er.textContent = e && e.code === 'too_large' ? 'That photo is too large. Take it again at a lower resolution.' : e && (e.code === 'not_granted' || e.code === 'invalid_argument') ? 'You don\'t have permission to add photos. Ask the meet director for Contributor access.' : e && e.code === 'quota_exceeded' ? 'The app\'s photo storage is full.' : 'Couldn\'t save the photo. Check your connection and try again.'; });
+      er.textContent = e && e.code === 'too_large' ? 'That photo is too large. Take it again at a lower resolution.' : e && (e.code === 'not_granted' || e.code === 'invalid_argument') ? 'You don\'t have permission to add photos. Ask the meet director for Contributor access.' : e && e.code === 'quota_exceeded' ? 'The app\'s photo storage is full. Ask the meet director to remove old photos.' : 'Couldn\'t save the photo. Check your connection and try again.'; });
   });
 }
 function viewShoe(id){
   var x = S.shoes.filter(function(s){ return s.id === id; })[0]; if (!x) return;
   openSheet('<div class="sh-top"><div><div class="muted mono-cap">SHOE CHECK · ' + (x.result === 'fail' ? 'FAIL' : 'PASS') + '</div><h2>' + esc(x.label) + '</h2><div class="muted">' + esc([x.name, x.team, x.bib ? '#' + x.bib : ''].filter(Boolean).join(' · ')) + '</div></div><button class="x" data-close aria-label="Close">×</button></div>' +
     '<img class="shoe-prev" ' + shoeImgAttr(x) + ' alt="' + esc(x.label) + '">' +
-    '<dl class="kv"><dt>Result</dt><dd><b class="pf pf-' + x.result + '">' + (x.result === 'fail' ? 'FAIL' : 'PASS') + '</b></dd><dt>Checked by</dt><dd>' + esc(x.byName || nameOf(x.by)) + '</dd><dt>When</dt><dd>' + esc(new Date(x.at).toLocaleString([], { weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'2-digit' })) + '</dd></dl>' +
+    '<dl class="kv"><dt>Result</dt><dd>' + (shoeEvResults(x) ? shoeEvResults(x).map(function(r){ return '<div class="sep-res"><b class="pf pf-' + r.result + '">' + pfWord(r.result) + '</b> ' + esc(r.name) + (r.day ? ' <span class="muted">· ' + esc(r.day) + '</span>' : '') + '</div>'; }).join('') : '<b class="pf pf-' + x.result + '">' + pfWord(x.result) + '</b>') + '</dd>' + (x.expires || shoeKeepDays() ? '<dt>Deleted</dt><dd>' + esc(new Date(x.expires || (new Date(x.at).getTime() + shoeKeepDays() * 864e5)).toLocaleDateString([], { weekday:'short', month:'short', day:'numeric' })) + '</dd>' : '') + '<dt>Checked by</dt><dd>' + esc(x.byName || nameOf(x.by)) + '</dd><dt>When</dt><dd>' + esc(new Date(x.at).toLocaleString([], { weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'2-digit' })) + '</dd></dl>' +
     '<div class="actions">' + (x.by === meId && cw() ? '<button class="btn warn" id="shoeDel">Remove this photo</button>' : '') + '<button class="btn" data-close>Close</button></div>');
   var del = $('#shoeDel');
   if (del) del.addEventListener('click', function(){
@@ -4941,8 +5002,8 @@ function shoeLog(main){
   var b = banners(); if (!live()){ main.innerHTML = b; return; }
   var f = UI.shoeF || 'all', q = shoeNormU(UI.shoeLQ);
   var list = S.shoes.slice().sort(function(a, b){ return (b.at || '').localeCompare(a.at || ''); });
-  var fails = list.filter(function(x){ return x.result === 'fail'; }).length;
-  if (f !== 'all') list = list.filter(function(x){ return x.result === f; });
+  var fails = list.filter(function(x){ return x.result === 'fail' || x.result === 'mixed'; }).length;
+  if (f !== 'all') list = list.filter(function(x){ return x.result === f || x.result === 'mixed'; });
   if (q) list = list.filter(function(x){ return [x.name, x.team, x.bib, x.label].join(' ').toLowerCase().indexOf(q) >= 0; });
   var groups = {}, order = []; list.forEach(function(x){ if (!groups[x.athKey]){ groups[x.athKey] = []; order.push(x.athKey); } groups[x.athKey].push(x); });
   main.innerHTML = b + '<div class="tsum"><div><b class="num">' + S.shoes.length + '</b><span>shoe photos</span></div><div' + (fails ? ' class="hot"' : '') + '><b class="num">' + fails + '</b><span>marked fail</span></div><div><b class="num">' + Object.keys(S.shoes.reduce(function(m, x){ m[x.athKey] = 1; return m; }, {})).length + '</b><span>athletes checked</span></div></div>' +
@@ -5005,7 +5066,7 @@ function input(e){
   return false;
 }
 
-return { setUser:setUser, attach:attach, detach:detach, live:live, cw:cw, offData:offData, LAYOUTS:LAYOUTS, shareNote:shareNote, tm:tm,
+return { shoeCheckable:shoeCheckable, shoeKeepDays:shoeKeepDays, setUser:setUser, attach:attach, detach:detach, live:live, cw:cw, offData:offData, LAYOUTS:LAYOUTS, shareNote:shareNote, tm:tm,
   laneCalls:laneCalls, heatCalls:heatCalls, clearsFor:clearsFor, finalOf:finalOf, callStage:callStage, statusLabel:statusLabel, ruleLabel:ruleLabel, isUmpired:isUmpired,
   canPhoto:canPhoto, shoesFor:shoesFor, shoeThumbs:shoeThumbs, shoeLog:shoeLog, photoReady:function(){ return !!assets; },
   renderHeats:renderHeats, renderInbox:renderInbox, renderCalls:renderCalls, setupCards:setupCards, rulesSection:rulesSection, badge:badge, inboxLabel:inboxLabel,

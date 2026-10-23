@@ -81,6 +81,18 @@ goes to them instead of clerking: they check athletes in and scratch them, chang
 note when each event starts and finishes, and see a countdown to the next event once its start time is set.
 Each coordinator has an access code on the **Access** page.
 
+## Deleting old shoe photos automatically
+On the meet director's **Setup** page, **Shoe check photos** sets how long photos are kept (1 to 90 days, or until
+someone removes them). Each photo saved after that carries an expiry date. To have Firebase delete expired photos on its
+own, even when nobody opens the app, turn on a TTL policy once:
+
+1. Firebase console → **Firestore Database** → **TTL** (in the tabs along the top) → **Create policy**.
+2. Collection group `photos`, timestamp field `expireAt`. Create.
+3. Create a second policy: collection group `shoes`, timestamp field `expireAt`.
+
+Firebase usually removes expired documents within a day of their expiry. The app also clears expired photos whenever an
+official with permission opens the meet. Shot put, discus, hammer, weight throw and super weight throw aren't shoe-checked, so they don't appear in shoe check.
+
 ## Updating the app later
 Replace `index.html` in the repository (**Add file → Upload files**, same name) and commit.
 GitHub Pages republishes within a couple of minutes. If the rules change, paste the new
