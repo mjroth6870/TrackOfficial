@@ -849,8 +849,8 @@ nav.tabs{justify-content:safe center}
 .clerk-switch{margin-top:14px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}
 .clerk-switch input{width:20px;height:20px;margin-top:2px;flex:0 0 auto}
 .noclerk #runPill,.noclerk #btnSound,.noclerk #btnVoice{display:none}
-.noclerk table.ed th:nth-child(6),.noclerk table.ed th:nth-child(7),.noclerk table.ed th:nth-child(11),.noclerk table.ed th:nth-child(12),
-.noclerk table.ed td[data-l="Clerk"],.noclerk table.ed td[data-l="Line Clerk"],.noclerk table.ed td[data-l="Call scheme"],.noclerk table.ed td.calc{display:none}
+.noclerk table.ed th:nth-child(6),.noclerk table.ed th:nth-child(11),.noclerk table.ed th:nth-child(12),
+.noclerk table.ed td[data-l="Clerk"],.noclerk table.ed td[data-l="Call scheme"],.noclerk table.ed td.calc{display:none}
 @media (min-width:1280px){ .noclerk table.ed{min-width:0} }
 .lanes tr.lr-na .lane{background:var(--navy);color:#fff}
 .stchip.sc-entered{background:var(--surface-2);color:var(--ink)}
@@ -889,6 +889,12 @@ nav.tabs{justify-content:safe center}
 header.top.stack{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"logo clock" "mid mid"}
 #uJump,#ciJump,#slJump{min-width:0;max-width:100%}
 @media (max-width:600px){ #uJump,#ciJump,#slJump{width:100%!important;flex:1 1 100%!important} }
+
+/* start line with clerking off */
+.sl-acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.sl-row.dns .who b{text-decoration:line-through}
+.touts{display:flex;flex-wrap:wrap;gap:4px 12px;padding:6px 14px 0;font-size:14px;color:var(--muted)}
+.touts>b{color:var(--ink)}
 
 </style>
 <script>
@@ -1864,7 +1870,7 @@ function setTabs(){
 function render(){
   document.body.classList.toggle('nomeet', !M);
   document.body.classList.toggle('noclerk', !clerkOn());
-  if (M && !clerkOn() && ROLE_DEFS[UI.role] && ROLE_DEFS[UI.role].group === 'clerk' && !$('#dlg .rolepick')){ setRole('', ''); setTimeout(function(){ roleDialog(false); toast('Clerking is turned off for this meet. Pick another role.'); }, 0); }
+  if (M && !clerkOn() && ROLE_DEFS[UI.role] && ROLE_DEFS[UI.role].group === 'clerk' && UI.role !== 'lineClerk' && !$('#dlg .rolepick')){ setRole('', ''); setTimeout(function(){ roleDialog(false); toast('Clerking is turned off for this meet. Pick another role.'); }, 0); }
   document.body.setAttribute('data-group', rgroup() || 'none');
   if (!M){
     if (UI.view === 'admin' && Acct.isAdmin()){ setTabs(); $('#meetName').textContent = 'Admin'; $('#dayLabel').textContent = 'Accounts and meets'; Acct.renderAdmin($('#main')); return; }
@@ -1890,14 +1896,14 @@ function render(){
 /* ---------- Live ---------- */
 function clerkList(d){ var s = {}; (d ? d.events : []).forEach(function(e){ if (e.clerk) s[e.clerk] = 1; if (e.lineClerk) s[e.lineClerk] = 1; }); return Object.keys(s).sort(); }
 function evMeta(ev){
-  return [ev.heats ? ev.heats + (ev.heats == 1 ? ' heat' : ' heats') : '', ev.athletes ? ev.athletes + ' athletes' : '', ev.round ? esc(ev.round) : '', ev.startType ? esc(ev.startType) : '',
+  return [ev.heats ? units(ev, ev.heats) : '', ev.athletes ? ev.athletes + ' athletes' : '', ev.round ? esc(ev.round) : '', ev.startType ? esc(ev.startType) : '',
     ev.clerk ? 'Clerk: ' + esc(ev.clerk) : '', ev.lineClerk ? 'Line: ' + esc(ev.lineClerk) : ''].filter(Boolean).map(function(x){ return String(x).replace(/^(\d+)/, function(n){ return esc(n); }); });
 }
 function startListHtml(ev, open){
   var secs = ev.entries || [];
   if (!secs.length) return '';
   var n = secs.reduce(function(a, s){ return a + s.lanes.length; }, 0), d = activeDay(), c = ciCounts(d, ev);
-  return '<details class="sl"' + (open ? ' open' : '') + '><summary>Start list · ' + secs.length + (secs.length === 1 ? ' heat' : ' heats') + ' · ' + n + ' entries' + (c.in || c.scr ? ' · ' + c.in + ' checked in' + (c.scr ? ', ' + c.scr + ' scratched' : '') : '') + '</summary><table class="sltbl">' +
+  return '<details class="sl"' + (open ? ' open' : '') + '><summary>Start list · ' + units(ev, secs.length) + ' · ' + n + ' entries' + (c.in || c.scr ? ' · ' + c.in + ' checked in' + (c.scr ? ', ' + c.scr + ' scratched' : '') : '') + '</summary><table class="sltbl">' +
     secs.map(function(s){
       return '<tr class="sh"><td colspan="4">' + esc(s.kind + ' ' + s.num + (s.of ? ' of ' + s.of : '') + (s.label ? ' · ' + s.label : '')) + '</td></tr>' +
         s.lanes.map(function(l){ var st = ciState(d, ev, l); return '<tr' + (st ? ' class="' + st + '"' : '') + '><td class="ln">' + esc(l.lane) + '</td><td class="num">' + esc(l.bib) + '</td><td>' + esc(l.name) + (ciLate(d, ev, l) ? '<span class="late-tag">LATE</span>' : '') + (isRelayLane(l) ? '<br><small>' + esc(legsText(l)) + '</small>' : '') + '</td><td>' + esc(l.team !== l.name.replace(/\s+[A-D]$/, '') ? l.team : '') + (l.seed ? ' <small class="num">' + esc(l.seed) + '</small>' : '') + '</td></tr>'; }).join('');
@@ -1909,11 +1915,14 @@ function ciKey(ev, l){ return ev.id + '|' + (l.bib ? '#' + l.bib : String(l.name
 function ciLate(d, ev, l){ var x = d && d.checkin && d.checkin[ciKey(ev, l)]; return !!(x && x.s === 'in' && x.late); }
 function ciState(d, ev, l){ var x = d && d.checkin && d.checkin[ciKey(ev, l)]; return x ? x.s : ''; }
 function ciCounts(d, ev, sec){
-  var c = { n:0, in:0, scr:0 };
-  (sec ? [sec] : (ev.entries || [])).forEach(function(s){ s.lanes.forEach(function(l){ c.n++; var st = ciState(d, ev, l); if (st) c[st]++; }); });
-  c.open = c.n - c.in - c.scr; return c;
+  var c = { n:0, in:0, scr:0, dns:0 };
+  (sec ? [sec] : (ev.entries || [])).forEach(function(s){ s.lanes.forEach(function(l){ c.n++; var st = ciState(d, ev, l); if (c[st] != null) c[st]++; }); });
+  c.open = c.n - c.in - c.scr - c.dns; c.tracked = ciTracked(ev); return c;
 }
+/* With clerking off nobody checks in: everyone is competing unless the line clerk marks them out. */
+function slPills(c){ if (!c.n) return ''; var on = c.n - c.scr - c.dns; return '<span class="ci-pill in">' + on + ' competing</span>' + (c.scr ? '<span class="ci-pill scr">' + c.scr + ' scr</span>' : '') + (c.dns ? '<span class="ci-pill scr">' + c.dns + ' DNS</span>' : ''); }
 function ciPills(c){
+  if (!clerkOn() && !c.tracked) return slPills(c);
   if (!c.n) return '';
   if (!c.open) return '<span class="ci-pill done">✓ All ' + c.n + ' accounted for</span>' + (c.scr ? '<span class="ci-pill scr">' + c.scr + ' scr</span>' : '');
   return '<span class="ci-pill in">' + c.in + ' / ' + c.n + ' in</span>' + (c.scr ? '<span class="ci-pill scr">' + c.scr + ' scr</span>' : '') + '<span class="ci-pill">' + c.open + ' to go</span>';
@@ -1938,7 +1947,7 @@ function renderCheckin(main){
   var evs = clerkEvents(d);
   if (!evs.length){ main.innerHTML = '<div class="card empty"><b>No events on ' + esc(d.name) + ' yet.</b><br>Add events on the Schedule, or import the meet program (HY-TEK, AthleticNET or MeetPro) under <b>Setup → Import meet program</b> to load each heat\'s athletes and teams here.</div>'; return; }
   var mode = UI.ciMode || 'heat';
-  var top = '<div class="ci-top"><div class="seg" role="group" aria-label="Check-in view"><button data-civ="heat" aria-pressed="' + (mode === 'heat') + '">One heat</button><button data-civ="all" aria-pressed="' + (mode === 'all') + '">All events</button></div>' +
+  var top = '<div class="ci-top"><div class="seg" role="group" aria-label="Check-in view"><button data-civ="heat" aria-pressed="' + (mode === 'heat') + '">One at a time</button><button data-civ="all" aria-pressed="' + (mode === 'all') + '">All events</button></div>' +
     (mode === 'all' ? '<input class="f" type="search" id="ciSearch" placeholder="Find event, athlete, team or bib" value="' + esc(UI.ciQ || '') + '" aria-label="Search check-in">' : '') + '</div>' +
     '<div class="ci-legend"><span><i></i>Not checked in</span><span><i style="background:var(--ci-in)"></i>Tap once — checked in</span><span><i style="background:var(--ci-scr)"></i>Tap twice — scratched</span><span>Tap again to clear</span></div>';
   main.innerHTML = top + (mode === 'heat' ? ciHeatView(d) : '<div id="ciList">' + ciAllView(d) + '</div>');
@@ -1956,7 +1965,7 @@ function ciAllView(d){
     var isOpen = q ? true : !!open[e.id], c = ciCounts(d, e);
     out += '<section class="ci-ev' + (isOpen ? ' open' : '') + '"><button class="ci-evh" data-citog="' + e.id + '" aria-expanded="' + isOpen + '"><span class="chev" aria-hidden="true">▶</span>' +
       '<span class="ci-num">' + (e.num != null ? 'EVENT ' + esc(e.num) : '') + '<br><b class="num" style="color:var(--ink)">' + fmt(e.start) + '</b></span>' +
-      '<span class="ci-name">' + esc(evTitle(e)) + '<small>' + [e.entries.length ? e.entries.length + (e.entries.length === 1 ? ' heat' : ' heats') : '<span style="color:var(--clay)">No athletes entered</span>', e.round ? esc(e.round) : '', e.line ? 'Line ' + esc(e.line) : '', e.clerk ? 'Clerk: ' + esc(e.clerk) : ''].filter(Boolean).join(' · ') + '</small></span>' +
+      '<span class="ci-name">' + esc(evTitle(e)) + '<small>' + [e.entries.length ? units(e, e.entries.length) : '<span style="color:var(--clay)">No athletes entered</span>', e.round ? esc(e.round) : '', e.line ? 'Line ' + esc(e.line) : '', e.clerk ? 'Clerk: ' + esc(e.clerk) : ''].filter(Boolean).join(' · ') + '</small></span>' +
       '<span class="ci-cnt">' + ciPills(c) + '</span></button>';
     if (isOpen && !entCount(e)) out += emptyHeatNote(e);
     else if (isOpen && canEditEntries()) out += '<div class="ent-bar">' + entButton(e) + '</div>';
@@ -1980,14 +1989,14 @@ function ciHeatView(d){
   var list = ciHeats(d), i = ciHeatIdx(d, list), h = list[i], e = h.e, s = h.s, c = ciCounts(d, e, s);
   UI.ciCursor = h.key;
   var jump = '<select class="f" id="ciJump" aria-label="Go to heat" style="flex:1 1 260px;width:auto">' + list.map(function(x, k){ var cc = ciCounts(d, x.e, x.s); return '<option value="' + x.key + '"' + (k === i ? ' selected' : '') + '>' + (cc.n && !cc.open ? '✓ ' : '') + fmt(x.e.start) + ' · ' + esc(evTitle(x.e)) + ' · ' + esc(secName(x.s)) + '</option>'; }).join('') + '</select>';
-  return '<div class="row" style="margin-bottom:4px"><span class="muted num" style="font-size:13px">Heat ' + (i + 1) + ' of ' + list.length + '</span>' + jump + '</div>' +
+  return '<div class="row" style="margin-bottom:4px"><span class="muted num" style="font-size:13px">' + countOf(list, i) + '</span>' + jump + '</div>' +
     '<div class="ci-prog" aria-hidden="true"><span style="width:' + Math.round((i + 1) / list.length * 100) + '%"></span></div>' +
     '<section class="ci-heat"><div class="ci-hh"><div class="muted" style="font-size:12px;font-weight:800;letter-spacing:.5px">' + (e.num != null ? 'EVENT ' + esc(e.num) + ' · ' : '') + esc(secName(s)).toUpperCase() + (s.label ? ' · ' + esc(s.label).toUpperCase() : '') + '</div>' +
       '<h2>' + esc(evTitle(e)) + '</h2>' + (e.note ? '<div class="muted" style="font-style:italic;font-size:14px">' + esc(e.note) + '</div>' : '') +
       '<div class="meta"><span>Starts <b class="num">' + fmt(e.start) + '</b></span>' + (e.line ? '<span>Line <b>' + esc(e.line) + '</b></span>' : '') + (e.startType ? '<span>' + esc(e.startType) + '</span>' : '') + '<span>' + s.lanes.length + (s.lanes.length === 1 ? ' entry' : ' entries') + '</span>' + (e.clerk ? '<span>Clerk <b>' + esc(e.clerk) + '</b></span>' : '') + '</div>' +
       (canEditEntries() && s.lanes.length ? '<div class="ent-bar">' + entButton(e) + '</div>' : '') + '</div>' +
       (s.lanes.length ? '<div class="ci-rows">' + ciRows(d, e, s.lanes) + '</div>' : emptyHeatNote(e)) + (slStaged(d, e, s) ? '<div class="sl-warn" style="background:var(--teal-soft);color:var(--teal);font-weight:700">✓ ' + (slStaged(d, e, s).skip ? 'Skipped at the start line' : 'Staged at the start line at ' + fmt(slStaged(d, e, s).at)) + '</div>' : '') + '</section>' +
-    '<div class="ci-bar"><button class="btn" data-cinav="-1"' + (i === 0 ? ' disabled' : '') + ' aria-label="Previous heat">‹ Prev</button><div class="sum">' + ciPills(c) + '</div><button class="btn ' + (c.open ? '' : 'go') + '" data-cinav="1"' + (i === list.length - 1 ? ' disabled' : '') + ' aria-label="Next heat">Next ›</button></div>';
+    '<div class="ci-bar"><button class="btn" data-cinav="-1"' + (i === 0 ? ' disabled' : '') + ' aria-label="Previous heat">‹ Prev</button><div class="sum">' + ciPills(c) + '</div><button class="btn ' + (c.open ? '' : 'go') + '" data-cinav="1"' + (i === list.length - 1 ? ' disabled' : '') + ' aria-label="Next">Next ›</button></div>';
 }
 function ciTap(key, dd){
   var d = dd || activeDay(), cur = d.checkin[key], now = Math.round(nowMin());
@@ -2010,7 +2019,17 @@ function slIdx(d, list){
   if (i < 0) i = list.findIndex(function(h){ return !slStaged(d, h.e, h.s); });
   return i < 0 ? list.length - 1 : i;
 }
+function slRowsOff(d, e, lanes){
+  return lanes.map(function(l){
+    var st = ciState(d, e, l), team = l.team && l.team !== String(l.name).replace(/\s+[A-D]$/, '') ? l.team : '', k = esc(ciKey(e, l)), out = st === 'scr' || st === 'dns', x = out ? d.checkin[ciKey(e, l)] : null, nm = esc(l.name || l.team);
+    return '<div class="sl-row ' + (st === 'dns' ? 'scr dns' : st === 'scr' ? 'scr' : 'in') + '"><span class="ln">' + esc(l.lane) + '</span>' +
+      '<span class="who"><b>' + nm + '</b><small>' + esc([l.bib ? '#' + l.bib : '', team].filter(Boolean).join(' · ')) + (isRelayLane(l) ? ((l.bib || team) ? '<br>' : '') + esc(legsText(l)) : '') + '</small></span>' +
+      '<span class="st">' + (out ? '<span>' + (st === 'dns' ? 'Did not start' : 'Scratched') + ' · ' + fmt(x.at) + '</span><button class="sl-undo" data-slmark="' + k + '|clear" aria-label="Undo for ' + nm + '">Undo</button>'
+        : '<span>Competing</span><span class="sl-acts"><button class="sl-late" data-slmark="' + k + '|scr" aria-label="Scratch ' + nm + '">Scratch</button><button class="sl-late" data-slmark="' + k + '|dns" aria-label="' + nm + ' did not start">DNS</button></span>') + '</span></div>';
+  }).join('');
+}
 function slRows(d, e, lanes){
+  if (!clerkOn()) return slRowsOff(d, e, lanes);
   return lanes.map(function(l){
     var st = ciState(d, e, l), relay = isRelayLane(l), team = l.team && l.team !== String(l.name).replace(/\s+[A-D]$/, '') ? l.team : '';
     var x = st ? d.checkin[ciKey(e, l)] : null, k = esc(ciKey(e, l));
@@ -2028,31 +2047,31 @@ function renderStartLine(main){
   var names = roster('lineClerk'); clerkEvents(d).forEach(function(e){ if (e.lineClerk && names.indexOf(e.lineClerk) < 0) names.push(e.lineClerk); });
   if (UI.slWho && names.indexOf(UI.slWho) < 0) UI.slWho = '';
   var list = slHeats(d);
-  var top = '<div class="ci-top">' + (names.length ? '<label class="row" style="gap:6px">Show <select class="f" id="slWho" style="width:auto"><option value="">All heats</option>' + names.map(function(n){ return '<option value="' + esc(n) + '"' + (n === UI.slWho ? ' selected' : '') + '>' + esc(n) + '\'s heats</option>'; }).join('') + '</select></label>' : '') +
-    '<span class="grow"></span><span class="muted" style="font-size:13px">' + list.filter(function(h){ return slStaged(d, h.e, h.s); }).length + ' of ' + list.length + ' heats staged</span></div>' +
-    '<div class="ci-legend"><span><i style="background:var(--ci-in)"></i>Checked in at Clerking</span><span><i style="background:var(--ci-scr)"></i>Scratched</span><span><i></i>Not checked in</span></div>';
+  var top = '<div class="ci-top">' + (names.length ? '<label class="row" style="gap:6px">Show <select class="f" id="slWho" style="width:auto"><option value="">Everyone\'s</option>' + names.map(function(n){ return '<option value="' + esc(n) + '"' + (n === UI.slWho ? ' selected' : '') + '>' + esc(n) + '\'s heats</option>'; }).join('') + '</select></label>' : '') +
+    '<span class="grow"></span><span class="muted" style="font-size:13px">' + list.filter(function(h){ return slStaged(d, h.e, h.s); }).length + ' of ' + list.length + (list.every(function(h){ return unitOf(h.e, h.s) === 'flight'; }) ? ' flights' : list.some(function(h){ return unitOf(h.e, h.s) === 'flight'; }) ? ' heats and flights' : ' heats') + ' staged</span></div>' +
+    (clerkOn() ? '<div class="ci-legend"><span><i style="background:var(--ci-in)"></i>Checked in at Clerking</span><span><i style="background:var(--ci-scr)"></i>Scratched</span><span><i></i>Not checked in</span></div>' : '<div class="ci-legend"><span><i style="background:var(--ci-in)"></i>Competing</span><span><i style="background:var(--ci-scr)"></i>Scratched or did not start</span><span>Umpires and timing see each mark as you make it</span></div>');
   if (!list.length){ main.innerHTML = top + '<div class="card empty">No heats are assigned to ' + esc(UI.slWho) + ' on ' + esc(d.name) + '. Assign line clerks on the Schedule tab, or show all heats.</div>'; return; }
   var i = slIdx(d, list), h = list[i], e = h.e, s = h.s, c = ciCounts(d, e, s), st = slStaged(d, e, s);
   UI.slCursor = h.key;
   var allDone = list.every(function(x){ return slStaged(d, x.e, x.s); });
   var jump = '<select class="f" id="slJump" aria-label="Go to heat" style="flex:1 1 260px;width:auto">' + list.map(function(x, k){ var ss = slStaged(d, x.e, x.s); return '<option value="' + x.key + '"' + (k === i ? ' selected' : '') + '>' + (ss ? (ss.skip ? '– ' : '✓ ') : '') + fmt(x.e.start) + ' · ' + esc(evTitle(x.e)) + ' · ' + esc(secName(x.s)) + '</option>'; }).join('') + '</select>';
   var action = st
-    ? '<div class="sl-done' + (st.skip ? ' skip' : '') + '">' + (st.skip ? 'Heat skipped at ' + fmt(st.at) : '✓ Staged at ' + fmt(st.at)) + ' <button class="btn sm" data-slundo>Undo</button></div>'
-    : '<button class="sl-stage" data-slstage>STAGED — athletes set in lanes</button>';
+    ? '<div class="sl-done' + (st.skip ? ' skip' : '') + '">' + (st.skip ? cap(unitOf(e, s)) + ' skipped at ' + fmt(st.at) : '✓ Staged at ' + fmt(st.at)) + ' <button class="btn sm" data-slundo>Undo</button></div>'
+    : '<button class="sl-stage" data-slstage>' + (unitOf(e, s) === 'flight' ? 'READY — flight at the event site' : 'STAGED — athletes set in lanes') + '</button>';
   main.innerHTML = top +
     (allDone ? '<div class="sl-done" style="margin-bottom:12px">✓ Every heat ' + (UI.slWho ? 'for ' + esc(UI.slWho) + ' ' : '') + 'on ' + esc(d.name) + ' has been staged.</div>' : '') +
-    '<div class="row" style="margin-bottom:4px"><span class="muted num" style="font-size:13px">Heat ' + (i + 1) + ' of ' + list.length + '</span>' + jump + '</div>' +
+    '<div class="row" style="margin-bottom:4px"><span class="muted num" style="font-size:13px">' + countOf(list, i) + '</span>' + jump + '</div>' +
     '<div class="ci-prog" aria-hidden="true"><span style="width:' + Math.round((i + (st ? 1 : 0)) / list.length * 100) + '%"></span></div>' +
     '<section class="ci-heat"><div class="ci-hh"><div class="muted" style="font-size:12px;font-weight:800;letter-spacing:.5px">' + (e.num != null ? 'EVENT ' + esc(e.num) + ' · ' : '') + esc(secName(s)).toUpperCase() + (s.label ? ' · ' + esc(s.label).toUpperCase() : '') + '</div>' +
       '<h2>' + esc(evTitle(e)) + '</h2>' +
       '<div class="meta"><span>Starts <b class="num">' + fmt(e.start) + '</b></span>' + (e.line ? '<span>Line <b>' + esc(e.line) + '</b></span>' : '') + (e.startType ? '<span><b>' + esc(e.startType) + '</b> start</span>' : '') + (e.lineClerk ? '<span>Line clerk <b>' + esc(e.lineClerk) + '</b></span>' : '') + '</div>' +
       '<div class="ci-cnt" style="justify-content:flex-start;margin-top:8px">' + ciPills(c) + (function(){ var n = s.lanes.filter(function(l){ return ciLate(d, e, l); }).length; return n ? '<span class="ci-pill" style="border-color:var(--amber);color:var(--ink)">' + n + ' late</span>' : ''; })() + '</div></div>' +
-      (c.open && !st ? '<div class="sl-warn"><b>' + c.open + (c.open === 1 ? ' athlete hasn\'t' : ' athletes haven\'t') + '</b> been checked in at Clerking yet. Use <b>Late check-in</b> if they report to the start.</div>' : '') +
+      (clerkOn() && c.open && !st ? '<div class="sl-warn"><b>' + c.open + (c.open === 1 ? ' athlete hasn\'t' : ' athletes haven\'t') + '</b> been checked in at Clerking yet. Use <b>Late check-in</b> if they report to the start.</div>' : '') +
       (s.lanes.length ? slRows(d, e, s.lanes) : emptyHeatNote(e)) + '</section>' +
     (s.lanes.length ? '<div style="margin-top:12px">' + action + '</div>' : '') +
-    '<div class="ci-bar"><button class="btn" data-slnav="-1"' + (i === 0 ? ' disabled' : '') + '>‹ Prev</button><div class="sum">' + (st ? '' : '<button class="btn sm" data-slskip>Skip this heat…</button>') + '</div>' +
-      '<button class="btn ' + (st ? 'go' : '') + '" data-slnav="1"' + (!st || i === list.length - 1 ? ' disabled' : '') + '>Next heat ›</button></div>' +
-    (!st ? '<div class="sl-lock">Next unlocks once this heat is staged.</div>' : '');
+    '<div class="ci-bar"><button class="btn" data-slnav="-1"' + (i === 0 ? ' disabled' : '') + '>‹ Prev</button><div class="sum">' + (st ? '' : '<button class="btn sm" data-slskip>Skip this ' + unitOf(e, s) + '…</button>') + '</div>' +
+      '<button class="btn ' + (st ? 'go' : '') + '" data-slnav="1"' + (!st || i === list.length - 1 ? ' disabled' : '') + '>Next ' + unitOf(e, s) + ' ›</button></div>' +
+    (!st ? '<div class="sl-lock">Next unlocks once this ' + unitOf(e, s) + ' is staged.</div>' : '');
 }
 function slMark(skip){
   var d = activeDay(), list = slHeats(d), i = slIdx(d, list), h = list[i];
@@ -2919,7 +2938,7 @@ function renderSchedule(main){
       (window.claude ? '' : '<button class="btn sm" onclick="window.print()">Print</button>') +
       '<button class="btn sm primary" id="addEv">+ Add event</button>' +
     '</div>' +
-    '<div class="card sched-wrap"><table class="ed"><thead><tr><th style="width:128px">Start</th><th style="width:170px">Event</th><th style="width:112px">Gender</th><th style="width:124px">Start type</th><th style="width:66px">Line</th><th style="width:150px">Clerk</th><th style="width:150px">Line Clerk</th><th style="width:70px">Heats</th><th style="width:80px">Athletes</th><th style="width:80px">Round</th><th style="width:200px">Call scheme</th><th>Call times</th><th class="noprint" style="width:' + (canEditEntries() ? 196 : 84) + 'px"></th></tr></thead><tbody>' +
+    '<div class="card sched-wrap"><table class="ed"><thead><tr><th style="width:128px">Start</th><th style="width:170px">Event</th><th style="width:112px">Gender</th><th style="width:124px">Start type</th><th style="width:66px">Line</th><th style="width:150px">Clerk</th><th style="width:150px">Line Clerk</th><th style="width:70px">Heats / flights</th><th style="width:80px">Athletes</th><th style="width:80px">Round</th><th style="width:200px">Call scheme</th><th>Call times</th><th class="noprint" style="width:' + (canEditEntries() ? 196 : 84) + 'px"></th></tr></thead><tbody>' +
     d.events.map(function(ev){ return schedRow(d, ev); }).join('') +
     '</tbody></table>' + (d.events.length ? '' : '<div class="empty">No events on this day. Click <b>+ Add event</b>.</div>') + '</div>' +
     '<datalist id="lineList">' + Object.keys(lines).sort().map(function(k){ return '<option value="' + esc(k) + '">'; }).join('') + '</datalist>' +
@@ -2935,7 +2954,7 @@ function schedRow(d, ev){
     '<td data-l="Line"><input data-f="line" list="lineList" value="' + esc(ev.line) + '" aria-label="Line" style="text-transform:uppercase"></td>' +
     '<td data-l="Clerk">' + nameSelect('clerk', ev.clerk, ['clerk','headClerk'], 'Clerk assigned') + '</td>' +
     '<td data-l="Line Clerk">' + nameSelect('lineClerk', ev.lineClerk, ['lineClerk'], 'Line clerk / starter\'s assistant') + '</td>' +
-    '<td data-l="Heats"><input data-f="heats" value="' + esc(ev.heats) + '" aria-label="Heats" inputmode="numeric"></td>' +
+    '<td data-l="Heats / flights"><input data-f="heats" value="' + esc(ev.heats) + '" aria-label="Heats" inputmode="numeric"></td>' +
     '<td data-l="Athletes"><input data-f="athletes" value="' + esc(ev.athletes || '') + '" aria-label="Athletes" inputmode="numeric"></td>' +
     '<td data-l="Round"><select data-f="round" aria-label="Round">' + opts(ROUNDS, ev.round, false) + '</select></td>' +
     '<td data-l="Call scheme"><select data-f="templateId" aria-label="Call scheme">' + M.templates.map(function(x){ return '<option value="' + x.id + '"' + (x.id === t.id ? ' selected' : '') + '>' + esc(x.name) + '</option>'; }).join('') + '</select></td>' +
@@ -3025,14 +3044,14 @@ function renderSetup(main){
         '<button class="btn sm" data-cadd style="margin-top:8px">+ Add call</button></div>';
     }).join('') + '<button class="btn primary" id="addTpl">+ Add call scheme</button></div>');
   /* Referee and meet director: Meet, Data, Rulebook. Head clerk: Meet, Data, Alerts, Call schemes, Clerking officials. One full-width row each. */
-  if (role === 'referee' || role === 'director'){ main.innerHTML = '<div class="grid2 rows">' + meetC + dataC + Ump.rulesSection() + (role === 'director' && !clerkOn() ? officialsCard('shoeCheck') : '') + (role === 'director' ? ceSetupCard() : '') + '</div>'; return; }
+  if (role === 'referee' || role === 'director'){ main.innerHTML = '<div class="grid2 rows">' + meetC + dataC + Ump.rulesSection() + (role === 'director' && !clerkOn() ? officialsCard(['lineClerk', 'shoeCheck']) : '') + (role === 'director' ? ceSetupCard() : '') + '</div>'; return; }
   if (role === 'headClerk'){ main.innerHTML = '<div class="grid2 rows">' + meetC + dataC + alertsC + schemesC + officialsCard() + '</div>'; return; }
   main.innerHTML = '<div class="grid2">' + (cM ? '' : '<div class="card pad" style="grid-column:1/-1"><b>Meet setup is handled by the meet director, head clerk or referee.</b> <span class="muted">Below are the umpiring settings for your role.</span></div>') +
     (cC ? officialsCard() : '') + (cM ? '<div class="stack">' + meetC + Ump.rulesSection() + '</div>' : '') + alertsC + Ump.setupCards(cM) + schemesC + dataC + '</div>';
 }
 function officialsCard(only){
-  return '<div class="card pad" id="officials">' + (only ? '<h2>Shoe check officials</h2><p class="hint" style="margin-top:0">Each name gets an access code on the Access page.</p>' : '<h2>Clerking officials</h2><p class="hint" style="margin-top:0">Names entered here appear in the Clerk and Line Clerk drop-downs on the Schedule, and each gets an access code. Renaming someone updates every event they\'re assigned to.</p>') +
-    ROLES.filter(function(r){ return !only || r.key === only; }).map(function(r){
+  return '<div class="card pad" id="officials">' + (only ? '<h2>Line clerks and shoe check</h2><p class="hint" style="margin-top:0">Each name gets an access code on the Access page. With clerking off, line clerks mark scratches and athletes who did not start at the start line, and umpires and timing see them straight away.</p>' : '<h2>Clerking officials</h2><p class="hint" style="margin-top:0">Names entered here appear in the Clerk and Line Clerk drop-downs on the Schedule, and each gets an access code. Renaming someone updates every event they\'re assigned to.</p>') +
+    ROLES.filter(function(r){ return !only || only.indexOf(r.key) >= 0; }).map(function(r){
       var list = M.officials[r.key], n = list.length;
       return '<div class="tpl" data-role="' + r.key + '"><div class="row" style="margin-bottom:8px"><b class="grow">' + esc(r.label) + '</b><label class="row" style="gap:6px;font-size:13px">How many <select class="f" data-ofcount style="width:auto">' +
         Array.from({length:r.max}, function(_, i){ return '<option' + (i+1 === n ? ' selected' : '') + '>' + (i+1) + '</option>'; }).join('') + '</select></label></div>' +
@@ -3066,6 +3085,12 @@ main.addEventListener('click', function(e){
   if (ceClick(e)) return;
   if (Ump.click(e)) return;
   /* start line */
+  if ((b = t.closest('[data-slmark]'))){
+    var mk = b.dataset.slmark, cut = mk.lastIndexOf('|'), key = mk.slice(0, cut), what = mk.slice(cut + 1), dm = activeDay();
+    if (what === 'clear') delete dm.checkin[key]; else dm.checkin[key] = { s:what, at:Math.round(nowMin()), by:'line' };
+    try{ if (navigator.vibrate) navigator.vibrate(15); }catch(e){}
+    save(); var ym = window.scrollY; renderStartLine(main); window.scrollTo(0, ym); return;
+  }
   if ((b = t.closest('[data-sllate]'))){
     var dl0 = activeDay(); dl0.checkin[b.dataset.sllate] = { s:'in', at:Math.round(nowMin()), late:true };
     try{ if (navigator.vibrate) navigator.vibrate(15); }catch(e){}
@@ -3078,11 +3103,11 @@ main.addEventListener('click', function(e){
   }
   if (t.closest('[data-slstage]')){
     var sd0 = activeDay(), sl0 = slHeats(sd0), sh0 = sl0[slIdx(sd0, sl0)], sc0 = ciCounts(sd0, sh0.e, sh0.s);
-    if (sc0.open) dialog('<h2>Stage this heat?</h2><p style="margin-top:0">' + sc0.open + (sc0.open === 1 ? ' athlete has' : ' athletes have') + ' not been checked in at Clerking. Stage the heat anyway?</p>', 'Staged', 'go', function(){ slMark(false); });
+    if (sc0.open) dialog('<h2>Stage this ' + unitOf(sh0.e, sh0.s) + '?</h2><p style="margin-top:0">' + sc0.open + (sc0.open === 1 ? ' athlete has' : ' athletes have') + ' not been checked in at Clerking. Stage the heat anyway?</p>', 'Staged', 'go', function(){ slMark(false); });
     else slMark(false);
     return;
   }
-  if (t.closest('[data-slskip]')){ dialog('<h2>Skip this heat?</h2><p style="margin-top:0">Use this when the heat won\'t run (e.g. combined or cancelled). It\'s marked as skipped and Next unlocks.</p>', 'Skip heat', 'warn', function(){ slMark(true); }); return; }
+  if (t.closest('[data-slskip]')){ var sk = activeDay(), skl = slHeats(sk), skh = skl[slIdx(sk, skl)], su = skh ? unitOf(skh.e, skh.s) : 'heat'; dialog('<h2>Skip this ' + su + '?</h2><p style="margin-top:0">Use this when the ' + su + ' won\'t run (e.g. combined or cancelled). It\'s marked as skipped and Next unlocks.</p>', 'Skip ' + su, 'warn', function(){ slMark(true); }); return; }
   if (t.closest('[data-slundo]')){ var sd1 = activeDay(), sl1 = slHeats(sd1), sh1 = sl1[slIdx(sd1, sl1)]; delete sd1.staged[slKey(sh1.e, sh1.s)]; save(); renderStartLine(main); return; }
   if ((b = t.closest('[data-slnav]'))){ var sd2 = activeDay(), sl2 = slHeats(sd2), si2 = slIdx(sd2, sl2), sj2 = Math.max(0, Math.min(sl2.length - 1, si2 + (+b.dataset.slnav))); UI.slCursor = sl2[sj2].key; renderStartLine(main); window.scrollTo(0, 0); return; }
   /* check-in */
@@ -3314,6 +3339,17 @@ document.addEventListener('visibilitychange', function(){ if (!document.hidden) 
    Everyone reads the same meet setup: days, events, heats and athletes.
    ===================================================================== */
 function lsGet(k, d){ try{ var v = localStorage.getItem(k); return v == null ? d : v; }catch(e){ return d; } }
+/* Field events run in flights, races in heats. */
+var FIELD_EV_RE = /\b(High|Long|Triple|Pole|Shot|Discus|Hammer|Javelin|Weight|Jump|Vault|Throw|Put|HJ|LJ|TJ|PV|SP|DT|HT|JT)\b/i;
+function isFieldEv(e){ return FIELD_EV_RE.test((e.fullName || '') + ' ' + (e.name || '')); }
+function unitOf(e, s){ var k = s && s.kind || ''; if (/flight/i.test(k)) return 'flight'; return isFieldEv(e) ? 'flight' : 'heat'; }
+function units(e, n){ n = +n || 0; var u = unitOf(e, (e.entries || [])[0]); return n + ' ' + u + (n === 1 ? '' : 's'); }
+function cap(w){ return w.charAt(0).toUpperCase() + w.slice(1); }
+/* "Heat 3 of 12", "Flight 2 of 4", or "3 of 12 heats and flights" when the list mixes both. */
+function countOf(list, i){
+  var u = list.map(function(h){ return unitOf(h.e, h.s); }), same = u.every(function(x){ return x === u[0]; });
+  return same ? cap(u[0] || 'heat') + ' ' + (i + 1) + ' of ' + list.length : (i + 1) + ' of ' + list.length + ' heats and flights';
+}
 function lsSet(k, v){ try{ if (v == null || v === '') localStorage.removeItem(k); else localStorage.setItem(k, v); }catch(e){} }
 
 var ROLE_DEFS = {
@@ -3353,7 +3389,7 @@ function isClerkRole(){ return rgroup() === 'clerk'; }
 function inboxLabel(){ return UI.role === 'umpire' ? 'My Calls' : (UI.role === 'chief' || UI.role === 'assistant') ? 'Review' : UI.role === 'timing' ? 'Results' : 'Decisions'; }
 function clerkOn(){ return !M || M.clerking !== false; }
 var CLERK_TABS = { live:1, checkin:1, startline:1, notes:1 };
-function roleTabs(){ var t = ROLE_TABS[UI.role] || ROLE_TABS.director; return clerkOn() ? t : t.filter(function(v){ return !CLERK_TABS[v]; }); }
+function roleTabs(){ var t = ROLE_TABS[UI.role] || ROLE_TABS.director; return clerkOn() ? t : t.filter(function(v){ return !CLERK_TABS[v] || (v === 'startline' && UI.role === 'lineClerk'); }); }
 function canSetupMeet(){ return ['director','headClerk','referee'].indexOf(UI.role) >= 0; }
 function canSetupClerk(){ return ['director','headClerk'].indexOf(UI.role) >= 0; }
 function canSetupUmp(){ return ['director','chief','referee'].indexOf(UI.role) >= 0; }
@@ -3395,13 +3431,13 @@ function roleChip(){
 }
 function roleDialog(firstRun){
   var cur = UI.role, d = Ump.offData(), n = Math.max(1, Math.min(40, d.umpireCount || 1));
-  var groups = clerkOn() ? ['meet','clerk','ump'] : ['meet','ump'];
+  var groups = ['meet','clerk','ump'];
   var html = '<div class="rp-head"><h2 id="rpT">' + (firstRun ? 'What is your job at this meet?' : 'Change role') + '</h2>' +
     '<p class="rp-sub">Each role sees only its own work. Everyone shares the same events, heats and athletes.</p></div>' +
     '<div class="rp-groups" role="radiogroup" aria-labelledby="rpT">' +
     groups.map(function(g){
       return '<div class="rp-grp g-' + g + '"><div class="rp-gh">' + esc(GROUP_LABEL[g]) + '</div><div class="rp-grid">' +
-        PICK_ORDER[g].filter(function(k){ return (k !== 'assistant' || d.useAssistant || cur === 'assistant') && (k !== 'multi' || multiOn() || cur === 'multi'); }).map(function(k){
+        PICK_ORDER[g].filter(function(k){ return (k !== 'assistant' || d.useAssistant || cur === 'assistant') && (k !== 'multi' || multiOn() || cur === 'multi') && (clerkOn() || ROLE_DEFS[k].group !== 'clerk' || k === 'lineClerk'); }).map(function(k){
           return '<label class="rp-card"><input type="radio" name="rPick" value="' + k + '"' + (k === cur ? ' checked' : '') + ' aria-describedby="rpHint"><span>' + esc(ROLE_DEFS[k].label) + '</span></label>';
         }).join('') + '</div></div>';
     }).join('') + '</div>' +
@@ -3443,7 +3479,8 @@ function roleDialog(firstRun){
    ===================================================================== */
 var ST_LABEL = { entered:'Entered', out:'Not checked in', in:'Checked in', late:'Late check-in', track:'On the track', raced:'Competed', review:'Call under review', dq:'Disqualified', nodq:'Cleared on review', final:'Final', dqfinal:'DQ · final', dns:'Did not start', scr:'Scratched', skip:'Heat not run' };
 function athState(d, e, s, l){
-  var off = !ciTracked(e), ci = off ? null : d.checkin && d.checkin[ciKey(e, l)], stg = off ? null : slStaged(d, e, s);
+  var off = !ciTracked(e), ci = d.checkin && d.checkin[ciKey(e, l)], stg = slStaged(d, e, s);
+  if (off && ci && ci.s !== 'scr' && ci.s !== 'dns') ci = null;
   var calls = Ump.laneCalls(e.id, s.num, l.lane), heatCalls = Ump.heatCalls(e.id, s.num), clears = Ump.clearsFor(e.id, s.num), fin = Ump.finalOf(e.id);
   var raced = clears.length > 0 || heatCalls.length > 0 || !!fin;
   var openP = function(c){ return c.protest && c.protest.status === 'open'; };
@@ -3452,6 +3489,7 @@ function athState(d, e, s, l){
   var nodq = calls.length && !pend && !dq;
   var code;
   if (ci && ci.s === 'scr') code = 'scr';
+  else if (ci && ci.s === 'dns') code = 'dns';
   else if (stg && stg.skip) code = 'skip';
   else if (!off && !ci && (stg || raced)) code = 'dns';
   else if (fin) code = dq ? 'dqfinal' : 'final';
@@ -3462,15 +3500,17 @@ function athState(d, e, s, l){
   else if (stg) code = 'track';
   else if (ci) code = ci.late ? 'late' : 'in';
   else code = off ? 'entered' : 'out';
-  return { code:code, label:ST_LABEL[code], ci:ci, stg:stg, calls:calls, clears:clears, fin:fin, raced:raced, pend:pend, dq:dq, off:off, ce:ceManaged(e) };
+  var unit = unitOf(e, s), label = code === 'skip' ? cap(unit) + ' not run' : code === 'track' && unit === 'flight' ? 'At the event' : ST_LABEL[code];
+  return { code:code, label:label, unit:unit, ci:ci, stg:stg, calls:calls, clears:clears, fin:fin, raced:raced, pend:pend, dq:dq, off:off, ce:ceManaged(e) };
 }
 function stChip(st){ return '<span class="stchip sc-' + st.code + '">' + esc(st.label) + '</span>'; }
 function athPipe(st){
   var steps = [];
   var ci = st.ci, off = st.off;
   if (!off) steps.push(ci && ci.s === 'scr' ? ['Check-in','skip','Scratched'] : ci ? ['Check-in','done',(ci.late ? 'Late · ' : '') + fmt(ci.at)] : st.code === 'dns' ? ['Check-in','skip','Missed'] : ['Check-in','now','Waiting']);
-  var stage = st.code === 'scr' ? ['Start line','skip',''] : st.stg ? (st.stg.skip ? ['Start line','skip','Heat not run'] : ['Start line', ci ? 'done' : 'skip', ci ? 'Staged ' + fmt(st.stg.at) : 'Not at start']) : ['Start line', ci ? 'now' : 'todo', ''];
-  if (!off && !st.ce) steps.push(stage);
+  var stage = st.code === 'scr' ? ['Start line','skip',''] : st.stg ? (st.stg.skip ? ['Start line','skip',cap(st.unit || 'heat') + ' not run'] : ['Start line', ci ? 'done' : 'skip', ci ? 'Staged ' + fmt(st.stg.at) : 'Not at start']) : ['Start line', ci ? 'now' : 'todo', ''];
+  if (off && !st.ce) stage = ci && ci.s === 'scr' ? ['Start line','skip','Scratched'] : ci && ci.s === 'dns' ? ['Start line','skip','Did not start'] : st.stg ? (st.stg.skip ? ['Start line','skip',cap(st.unit || 'heat') + ' not run'] : ['Start line','done','Staged ' + fmt(st.stg.at)]) : ['Start line','todo',''];
+  if (!st.ce) steps.push(stage);
   var race = st.code === 'scr' || st.code === 'dns' || st.code === 'skip' ? ['Race','skip',''] : st.raced ? ['Race','done', st.clears.length ? st.clears.length + ' umpire OK' + (st.clears.length > 1 ? 's' : '') : 'Run'] : st.stg ? ['Race','now','On track'] : ['Race','todo',''];
   steps.push(race);
   var call = st.calls.length ? ['Umpires', st.pend ? 'now' : 'done', st.pend ? Ump.callStage(st.calls) : st.dq ? 'DQ' : 'No DQ'] : st.raced && st.code !== 'dns' ? ['Umpires','done','No calls'] : ['Umpires', st.code === 'scr' || st.code === 'dns' ? 'skip' : 'todo', ''];
@@ -3497,7 +3537,7 @@ function renderStatus(main){
   var mode = UI.stMode || 'events';
   var head = '<div class="tsum">' +
     (clerkOn() ? '<div><b class="num">' + tot.in + '<small>/' + (tot.n - tot.scr) + '</small></b><span>athletes checked in' + (tot.scr ? ' · ' + tot.scr + ' scratched' : '') + '</span></div>' +
-    '<div><b class="num">' + tot.staged + '<small>/' + tot.heats + '</small></b><span>heats staged at the start</span></div>' : '<div><b class="num">' + tot.n + '</b><span>athletes entered</span></div>') +
+    '<div><b class="num">' + tot.staged + '<small>/' + tot.heats + '</small></b><span>' + (evs.some(isFieldEv) ? 'heats and flights' : 'heats') + ' staged at the start</span></div>' : '<div><b class="num">' + tot.n + '</b><span>athletes entered</span></div>') +
     '<div><b class="num">' + tot.umped + '<small>/' + tot.heats + '</small></b><span>heats umpired</span></div>' +
     '<div' + (tot.pend ? ' class="hot"' : '') + '><b class="num">' + tot.pend + '</b><span>calls under review</span></div>' +
     '<div><b class="num">' + tot.fin + '<small>/' + tot.evs + '</small></b><span>events final</span></div></div>' +
@@ -3520,8 +3560,9 @@ function statusEvents(d){
       ['Event', ceR.end != null ? 'done' : ceR.start != null ? 'now' : 'todo', ceR.end != null ? fmt(ceR.start) + '–' + fmt(ceR.end) : ceR.start != null ? 'Started ' + fmt(ceR.start) : 'Not started']] : clerkOn() ? [
       ['Calls', made === cl.length && cl.length ? 'done' : made ? 'now' : 'todo', made + '/' + cl.length],
       ['Check-in', !cc.n ? 'todo' : !cc.open ? 'done' : cc.in ? 'now' : 'todo', cc.in + '/' + (cc.n - cc.scr) + (cc.scr ? ' · ' + cc.scr + ' scr' : '')],
-      ['Staged', !H ? 'todo' : stg === H ? 'done' : stg ? 'now' : 'todo', stg + '/' + H + ' heats']] : [], [
-      ['Umpired', !umpd ? 'skip' : !H ? 'todo' : um === H ? 'done' : um ? 'now' : 'todo', umpd ? um + '/' + H + ' heats' : 'Not umpired'],
+      ['Staged', !H ? 'todo' : stg === H ? 'done' : stg ? 'now' : 'todo', stg + '/' + units(e, H)]] : [
+      ['Start line', !H ? 'todo' : stg === H ? 'done' : stg || cc.scr || cc.dns ? 'now' : 'todo', stg + '/' + units(e, H) + ' staged' + (cc.scr ? ' · ' + cc.scr + ' scr' : '') + (cc.dns ? ' · ' + cc.dns + ' DNS' : '')]], [
+      ['Umpired', !umpd ? 'skip' : !H ? 'todo' : um === H ? 'done' : um ? 'now' : 'todo', umpd ? um + '/' + units(e, H) : 'Not umpired'],
       ['Review', pend ? 'now' : calls ? 'done' : 'todo', pend ? pend + ' open' : calls ? calls + ' decided' : 'No calls'],
       ['Final', fin ? 'done' : 'todo', fin ? Ump.tm(fin.at) : '—']
     ]));
@@ -3535,7 +3576,7 @@ function statusEvents(d){
     }).join('');
     return '<section class="ci-ev' + (isOpen ? ' open' : '') + (fin ? ' fin' : '') + '"><button class="ci-evh" data-stog="' + e.id + '" aria-expanded="' + isOpen + '"><span class="chev" aria-hidden="true">▶</span>' +
       '<span class="ci-num">' + (e.num != null ? 'EVENT ' + esc(e.num) : '') + '<br><b class="num" style="color:var(--ink)">' + fmt(e.start) + '</b></span>' +
-      '<span class="ci-name">' + esc(evTitle(e)) + '<small>' + [H ? H + (H === 1 ? ' heat' : ' heats') : '<span style="color:var(--clay)">No athletes entered</span>', e.line ? 'Line ' + esc(e.line) : '', e.start != null && e.start < now && !stg ? '<span style="color:var(--clay)">start time passed</span>' : ''].filter(Boolean).join(' · ') + '</small></span></button>' +
+      '<span class="ci-name">' + esc(evTitle(e)) + '<small>' + [H ? units(e, H) : '<span style="color:var(--clay)">No athletes entered</span>', e.line ? 'Line ' + esc(e.line) : '', e.start != null && e.start < now && !stg ? '<span style="color:var(--clay)">start time passed</span>' : ''].filter(Boolean).join(' · ') + '</small></span></button>' +
       '<div class="evpipe-wrap">' + bar + '</div>' + body + '</section>';
   }).join('');
 }
@@ -3590,7 +3631,7 @@ function accessList(){
   out.push({ pos:'director', title:'Meet Director', name:'', group:'meet', detail:ROLE_DEFS.director.hint });
   out.push({ pos:'timing', title:'Timing', name:d.timing, group:'meet', detail:ROLE_DEFS.timing.hint });
   if (multiOn()) ceCoords().forEach(function(x, i){ out.push({ pos:'ce' + (i + 1), title:'Combined Events ' + (i + 1), name:x.name || '', group:'meet', detail:ceScopeLabel(x.scope) + ' combined events: check-in, start times and countdown' }); });
-  [['headClerk','hc'],['clerk','ck'],['lineClerk','lc'],['shoeCheck','sc']].filter(function(r){ return clerkOn() || r[0] === 'shoeCheck'; }).forEach(function(r){
+  [['headClerk','hc'],['clerk','ck'],['lineClerk','lc'],['shoeCheck','sc']].filter(function(r){ return clerkOn() || r[0] === 'shoeCheck' || r[0] === 'lineClerk'; }).forEach(function(r){
     var list = M.officials[r[0]] || [], any = false;
     list.forEach(function(nm, i){ if ((nm || '').trim()){ any = true; out.push({ pos:r[1] + (i + 1), title:ROLE_DEFS[r[0]].label, name:nm.trim(), group:'clerk', detail:ROLE_DEFS[r[0]].hint }); } });
     if (!any) out.push({ pos:r[1] + '1', title:ROLE_DEFS[r[0]].label, name:'', group:'clerk', detail:'Add names under Setup → Officials for a code per person' });
@@ -3609,7 +3650,7 @@ function renderAccess(main){
     '<span class="qr-act"><button class="btn sm" data-qrbig="' + a.pos + '">Show large</button><button class="btn sm" data-qrcopy="' + a.pos + '">Copy link</button></span></div></div>'; };
   var sec = function(t, g){ var x = list.filter(function(a){ return a.group === g; }); return x.length ? '<h2 class="section-title">' + t + '</h2><div class="qr-grid">' + x.map(card).join('') + '</div>' : ''; };
   main.innerHTML = '<div class="card pad"><h2>Access codes · ' + esc(M.name) + '</h2><p class="hint" style="margin-top:0;font-size:14px">Each official scans their code with their phone\'s camera. The app opens on that device with this meet and their role already set: clerks land on Live Calls or the Start Line, umpires on their heats with their posts, the chief, referee and timing on their queues. The code sets up the device; each person still needs to be signed in with access to this app.</p>' + (lib ? '' : '<p class="err">The QR code library didn\'t load. Use Copy link to send each official their link.</p>') + '</div>' +
-    sec('Meet', 'meet') + sec(clerkOn() ? 'Clerking' : 'Shoe check', 'clerk') + sec('Lead officials', 'ump') + sec('Umpires', 'umps');
+    sec('Meet', 'meet') + sec(clerkOn() ? 'Clerking' : 'Line clerks and shoe check', 'clerk') + sec('Lead officials', 'ump') + sec('Umpires', 'umps');
 }
 function showQrBig(pos){
   var a = accessList().filter(function(x){ return x.pos === pos; })[0]; if (!a) return;
@@ -3743,7 +3784,7 @@ function openEntries(evId){
   if (!f || !canEditEntries()) return;
   var e = f.e, relay = isRelayEv(e);
   var secs = JSON.parse(JSON.stringify(e.entries || []));
-  if (!secs.length) secs = [{ kind:'Heat', num:1, of:1, lanes:[] }];
+  if (!secs.length) secs = [{ kind:isFieldEv(e) ? 'Flight' : 'Heat', num:1, of:1, lanes:[] }];
   secs.forEach(function(s){ if (!s.lanes.length) s.lanes.push({ lane:'1', name:'', team:'', bib:'' }); s.lanes.forEach(function(l){ if (relay && !l.legs) l.legs = (l.members || []).slice(0, 4).map(cleanMember); if (relay) while (l.legs.length < 4) l.legs.push(''); }); });
   ENT = { d:f.d, e:e, relay:relay, secs:secs, P:entPeople() };
   var box = $('#dlg');
@@ -3751,7 +3792,7 @@ function openEntries(evId){
     '<div class="row" style="align-items:flex-start"><div class="grow"><div class="muted mono-cap" style="font-size:12px;font-weight:800;letter-spacing:.5px">' + (e.num != null ? 'EVENT ' + esc(e.num) + ' · ' : '') + esc(fmt(e.start)) + '</div><h2 id="entT" style="margin:2px 0 0">' + esc(evTitle(e)) + '</h2></div><button class="x" data-ent="close" aria-label="Close">×</button></div>' +
     '<p class="hint" style="margin:6px 0 10px">' + (relay ? 'Pick each team, then its four runners <b>in leg order</b>. Runners already listed in the meet program are filled in for you; check the order before saving. Umpires choose the runner by leg when they report a foul.' : 'Start typing a name and pick the athlete from the meet program. Their team and bib fill in automatically.') + '</p>' +
     '<div id="entBody"></div><div class="err" id="entErr" role="alert" hidden></div>' +
-    '<div class="row ent-foot"><button class="btn" data-ent="addheat">+ Add heat</button><span class="grow"></span><button class="btn" data-ent="close">Cancel</button><button class="btn primary" data-ent="save">Save</button></div>' +
+    '<div class="row ent-foot"><button class="btn" data-ent="addheat">+ Add ' + unitOf(e, secs[0]) + '</button><span class="grow"></span><button class="btn" data-ent="close">Cancel</button><button class="btn primary" data-ent="save">Save</button></div>' +
     '<datalist id="entAth">' + ENT.P.list.map(function(a){ return '<option value="' + esc(a.ekey) + '">'; }).join('') + '</datalist>' +
     '<datalist id="entTeam">' + ENT.P.teams.map(function(t){ return '<option value="' + esc(t) + '">'; }).join('') + '</datalist>' +
     '</div></div>';
@@ -3763,7 +3804,7 @@ function entWho(l){ return l.name ? l.name + (l.team ? ' — ' + l.team : '') : 
 function entDraw(){
   var R = ENT.relay;
   $('#entBody').innerHTML = ENT.secs.map(function(s, h){
-    return '<section class="ent-heat" data-h="' + h + '"><div class="row ent-hh"><b>' + esc((s.kind || 'Heat') + ' ' + (h + 1)) + '</b><span class="muted" style="font-size:13px">' + s.lanes.filter(function(l){ return l.name || l.team; }).length + (R ? ' teams' : ' athletes') + '</span><span class="grow"></span>' + (ENT.secs.length > 1 ? '<button class="btn sm warn" data-ent="delheat">Remove heat</button>' : '') + '</div>' +
+    return '<section class="ent-heat" data-h="' + h + '"><div class="row ent-hh"><b>' + esc((s.kind || 'Heat') + ' ' + (h + 1)) + '</b><span class="muted" style="font-size:13px">' + s.lanes.filter(function(l){ return l.name || l.team; }).length + (R ? ' teams' : ' athletes') + '</span><span class="grow"></span>' + (ENT.secs.length > 1 ? '<button class="btn sm warn" data-ent="delheat">Remove ' + unitOf(ENT.e, s) + '</button>' : '') + '</div>' +
       s.lanes.map(function(l, r){
         return '<div class="ent-row' + (R ? ' relay' : '') + '" data-r="' + r + '"><label class="ent-ln"><span>Lane</span><input class="f ent-lane" value="' + esc(l.lane) + '" inputmode="numeric" aria-label="Lane"></label>' +
           (R ? '<label class="ent-main"><span>Team</span><input class="f ent-team" list="entTeam" value="' + esc(l._school != null ? l._school : relaySchool(l)) + '" placeholder="Start typing a team" autocomplete="off"></label>'
@@ -3792,7 +3833,7 @@ function entClick(ev){
   if (a === 'close'){ $('#dlg').innerHTML = ''; ENT = null; return; }
   entRead();
   var sec = b.closest('.ent-heat'), s = sec ? ENT.secs[+sec.dataset.h] : null;
-  if (a === 'addheat'){ ENT.secs.push({ kind:(ENT.secs[0] && ENT.secs[0].kind) || 'Heat', num:ENT.secs.length + 1, lanes:[{ lane:'1', name:'', team:'', bib:'', legs:ENT.relay ? ['', '', '', ''] : undefined }] }); entSync(); entDraw(); return; }
+  if (a === 'addheat'){ ENT.secs.push({ kind:(ENT.secs[0] && ENT.secs[0].kind) || (isFieldEv(ENT.e) ? 'Flight' : 'Heat'), num:ENT.secs.length + 1, lanes:[{ lane:'1', name:'', team:'', bib:'', legs:ENT.relay ? ['', '', '', ''] : undefined }] }); entSync(); entDraw(); return; }
   if (a === 'delheat'){ ENT.secs.splice(+sec.dataset.h, 1); entSync(); entDraw(); return; }
   if (a === 'addrow'){ var used = s.lanes.map(function(l){ return +l.lane || 0; }); s.lanes.push({ lane:String((used.length ? Math.max.apply(null, used) : 0) + 1), name:'', team:'', bib:'', legs:ENT.relay ? ['', '', '', ''] : undefined }); entSync(); entDraw(); var rows = $$('.ent-heat[data-h="' + ENT.secs.indexOf(s) + '"] .ent-row'); var inp = rows.length && rows[rows.length - 1].querySelector('.ent-who,.ent-team'); if (inp) inp.focus(); return; }
   if (a === 'delrow'){ s.lanes.splice(+b.closest('.ent-row').dataset.r, 1); entSync(); entDraw(); return; }
@@ -3812,7 +3853,7 @@ function entSave(){
       if (R){
         var team = String(l._team != null ? l._team : relaySchool(l)).trim(), legs = (l.legs || []).map(function(x){ return String(x || '').trim(); });
         if (!team && !legs.some(Boolean)) return;
-        if (!team){ errs.push('Heat ' + (h + 1) + ', lane ' + (lane || '?') + ': pick the team.'); return; }
+        if (!team){ errs.push(cap(unitOf(e, s)) + ' ' + (h + 1) + ', lane ' + (lane || '?') + ': pick the team.'); return; }
         if (P.teams.indexOf(team) < 0 && !(orig['t:' + shoeNorm(team)] || []).length) errs.push('“' + team + '” isn\'t a team in the meet program.');
         var clean = legs.map(function(n, k){ if (!n) return ''; var hit = entFind(P, n); if (!hit){ errs.push('Leg ' + (k + 1) + ' for ' + team + ': “' + n + '” isn\'t in the meet program.'); return n; } return hit.name; });
         var dupe = clean.filter(Boolean).filter(function(n, i, arr){ return arr.indexOf(n) !== i; });
@@ -3826,8 +3867,8 @@ function entSave(){
         var o2 = take('a:' + shoeNorm(hit.name) + '|' + shoeNorm(hit.team)) || {};
         lanes.push(Object.assign({}, o2, { lane:lane, name:hit.name, team:hit.team || '', bib:o2.bib || Object.keys(hit.bibs || {})[0] || '' }));
       }
-      if (!lane) errs.push('Heat ' + (h + 1) + ': every ' + (R ? 'team' : 'athlete') + ' needs a lane.');
-      else if (seen[lane]) errs.push('Heat ' + (h + 1) + ': lane ' + lane + ' is used twice.');
+      if (!lane) errs.push(cap(unitOf(e, s)) + ' ' + (h + 1) + ': every ' + (R ? 'team' : 'athlete') + ' needs a lane.');
+      else if (seen[lane]) errs.push(cap(unitOf(e, s)) + ' ' + (h + 1) + ': lane ' + lane + ' is used twice.');
       seen[lane] = 1;
     });
     if (lanes.length) out.push({ kind:s.kind || 'Heat', num:0, label:s.label || '', lanes:lanes.sort(function(a, b){ return (parseFloat(a.lane) || 0) - (parseFloat(b.lane) || 0); }) });
@@ -3836,7 +3877,7 @@ function entSave(){
   out.forEach(function(s, i){ s.num = i + 1; s.of = out.length; });
   e.entries = out; e.heats = out.length ? String(out.length) : e.heats; e.athletes = out.reduce(function(n, s){ return n + s.lanes.length; }, 0) || ''; e.entriesByClerk = true;
   $('#dlg').innerHTML = ''; ENT = null;
-  save(); render(); toast(out.length ? 'Saved ' + evTitle(e) + ': ' + e.athletes + (R ? ' teams' : ' athletes') + ' in ' + out.length + (out.length === 1 ? ' heat' : ' heats') : 'Cleared the athletes for ' + evTitle(e));
+  save(); render(); toast(out.length ? 'Saved ' + evTitle(e) + ': ' + e.athletes + (R ? ' teams' : ' athletes') + ' in ' + units(e, out.length) : 'Cleared the athletes for ' + evTitle(e));
 }
 function entMainClick(ev){ var b = ev.target.closest('[data-entedit]'); if (!b) return false; openEntries(b.dataset.entedit); return true; }
 /* A re-imported meet program keeps the clerks' work: an event the program still leaves empty keeps the
@@ -4437,24 +4478,29 @@ function meChip(e, block){
   return '<div class="me-chip' + (block ? ' block' : '') + '"><span class="lane">' + esc(me.slice(1)) + '</span><span><small>Umpire ' + esc(me.slice(1)) + '</small><b>' + esc(name || 'Name not set') + '</b></span>' + posts + '</div>';
 }
 function clerkLine(d, e, s){
-  if (!ciTracked(e)) return '';
+  if (!ciTracked(e)){
+    var c0 = ciCounts(d, e, s), st0 = slStaged(d, e, s);
+    if (!st0 && !c0.scr && !c0.dns) return '';
+    return '<div class="clerkline"><span class="cl-h">Start line</span>' + (c0.scr ? '<span class="ci-pill scr">' + c0.scr + ' scratched</span>' : '') + (c0.dns ? '<span class="ci-pill scr">' + c0.dns + ' did not start</span>' : '') +
+      (st0 ? (st0.skip ? '<span class="ci-pill">' + cap(unitOf(e, s)) + ' not run</span>' : '<span class="ci-pill staged">Staged ' + fmt(st0.at) + '</span>') : '') + '</div>';
+  }
   var c = ciCounts(d, e, s), stg = slStaged(d, e, s);
   var ce = ceManaged(e), r = e.ceRun || {};
   var t = '<div class="clerkline"><span class="cl-h">' + (ce ? 'Combined events' : 'Clerking') + '</span>' +
     '<span class="ci-pill in">' + c.in + ' of ' + c.n + ' checked in</span>' + (c.scr ? '<span class="ci-pill scr">' + c.scr + ' scratched</span>' : '') + (c.open ? '<span class="ci-pill">' + c.open + ' not checked in</span>' : '') +
     (ce ? (r.end != null ? '<span class="ci-pill">Finished ' + fmt(r.end) + '</span>' : r.start != null ? '<span class="ci-pill staged">Under way · started ' + fmt(r.start) + '</span>' : '<span class="ci-pill">Not started</span>')
-      : stg ? (stg.skip ? '<span class="ci-pill">Heat not run</span>' : '<span class="ci-pill staged">On the track · staged ' + fmt(stg.at) + '</span>') : '<span class="ci-pill">Not staged yet</span>') + '</div>';
+      : stg ? (stg.skip ? '<span class="ci-pill">' + cap(unitOf(e, s)) + ' not run</span>' : '<span class="ci-pill staged">On the track · staged ' + fmt(stg.at) + '</span>') : '<span class="ci-pill">Not staged yet</span>') + '</div>';
   return t;
 }
 function laneRows(d, e, s, lanes, canFlag){
   return lanes.map(function(l){
-    var cs = laneCalls(e.id, s.num, l.lane), st = ciTracked(e) ? ciState(d, e, l) : 'na', x = st ? d.checkin[ciKey(e, l)] : null, stg = slStaged(d, e, s);
-    var tag = st === 'na' ? '' : st === 'in' ? '<span class="ln-st in">' + (x.late ? 'Late check-in' : 'Checked in') + '</span>' : st === 'scr' ? '<span class="ln-st scr">Scratched · empty lane</span>' : '<span class="ln-st out">' + (stg ? 'Not at start' : 'Not checked in') + '</span>';
+    var cs = laneCalls(e.id, s.num, l.lane), st0 = ciState(d, e, l), st = ciTracked(e) ? st0 : (st0 === 'scr' || st0 === 'dns' ? st0 : 'na'), x = st ? d.checkin[ciKey(e, l)] : null, stg = slStaged(d, e, s);
+    var tag = st === 'na' ? '' : st === 'dns' ? '<span class="ln-st scr">Did not start</span>' : st === 'in' ? '<span class="ln-st in">' + (x.late ? 'Late check-in' : 'Checked in') + '</span>' : st === 'scr' ? '<span class="ln-st scr">Scratched · empty lane</span>' : '<span class="ln-st out">' + (stg ? 'Not at start' : 'Not checked in') + '</span>';
     return '<tr class="lr-' + (st || 'out') + '"><td><span class="lane">' + esc(l.lane) + '</span></td>' +
       '<td><div class="ath">' + esc(l.name || l.team) + '<small>' + esc([l.bib ? '#' + l.bib : '', l.team && l.team !== l.name ? l.team : ''].filter(Boolean).join(' · ')) + (isRelayLane(l) ? '<br>' + esc(legsText(l)) : '') + '</small>' + tag + '</div></td>' +
       '<td class="col-seed num muted">' + esc(l.seed || '') + '</td>' +
       '<td><span class="cell-chips">' + cs.map(function(c){ return '<button class="upill ' + (STATUS[c.status] || {}).cls + '" style="border:0;cursor:pointer" data-uopen="' + c.id + '" title="' + esc(ruleLabel(c)) + '">' + (c.protest && c.protest.status === 'open' ? 'Protest' : (STATUS[c.status] || {}).label) + '</button>'; }).join('') +
-      (canFlag && st !== 'scr' ? '<button class="flagbtn" data-uflag="' + e.id + '|' + s.num + '|' + esc(l.lane) + '" aria-label="Report a foul, lane ' + esc(l.lane) + '">' + FLAG + 'Flag</button>' : '') + '</span></td></tr>';
+      (canFlag && st !== 'scr' && st !== 'dns' ? '<button class="flagbtn" data-uflag="' + e.id + '|' + s.num + '|' + esc(l.lane) + '" aria-label="Report a foul, lane ' + esc(l.lane) + '">' + FLAG + 'Flag</button>' : '') + '</span></td></tr>';
   }).join('');
 }
 function renderHeats(main){
@@ -4476,7 +4522,7 @@ function heatCard(d, list, canFlag){
   var st = '';
   if (mine.length) st = '<div class="heat-status has-calls">' + FLAG + ' You reported ' + mine.length + (mine.length === 1 ? ' call' : ' calls') + ' in this heat.</div>';
   else if (clr) st = '<div class="heat-status ok">✓ You marked this heat OK at ' + tm(clr.at) + '. <button class="linkbtn" data-uunclear>Undo</button></div>';
-  return '<div class="row" style="margin-bottom:4px"><span class="muted num" style="font-size:13px">Heat ' + (i + 1) + ' of ' + list.length + '</span>' + jump + '</div>' +
+  return '<div class="row" style="margin-bottom:4px"><span class="muted num" style="font-size:13px">' + countOf(list, i) + '</span>' + jump + '</div>' +
     '<div class="ci-prog" aria-hidden="true"><span style="width:' + Math.round((i + 1) / list.length * 100) + '%"></span></div>' +
     '<section class="ci-heat"><div class="ci-hh"><div class="muted" style="font-size:12px;font-weight:800;letter-spacing:.5px">' + (e.num != null ? 'EVENT ' + esc(e.num) + ' · ' : '') + esc(secName(s)).toUpperCase() + (lay ? ' · ' + layoutName(lay).toUpperCase() : '') + '</div>' +
       '<h2>' + esc(evTitle(e)) + '</h2>' + (e.note ? '<div class="muted" style="font-style:italic;font-size:14px">' + esc(e.note) + '</div>' : '') +
@@ -4499,12 +4545,12 @@ function allHeats(d, canFlag){
     var pend = ec.filter(function(c){ return c.status === 'reported' || c.status === 'referee'; }).length, dq = ec.filter(function(c){ return c.status === 'dq'; }).length, pr = ec.filter(function(c){ return c.protest && c.protest.status === 'open'; }).length;
     out += '<section class="ci-ev' + (isOpen ? ' open' : '') + '"><button class="ci-evh" data-utog="' + e.id + '" aria-expanded="' + isOpen + '"><span class="chev" aria-hidden="true">▶</span>' +
       '<span class="ci-num">' + (e.num != null ? 'EVENT ' + esc(e.num) : '') + '<br><b class="num" style="color:var(--ink)">' + fmt(e.start) + '</b></span>' +
-      '<span class="ci-name">' + esc(evTitle(e)) + '<small>' + [e.entries.length ? e.entries.length + (e.entries.length === 1 ? ' heat' : ' heats') : '<span style="color:var(--clay)">No athletes entered</span>', eventLayout(e) ? layoutName(eventLayout(e)) : ''].filter(Boolean).join(' · ') + '</small></span>' +
-      '<span class="ci-cnt">' + (finalOf(e.id) ? '<span class="upill s-final">Final</span>' : '') + (pend ? '<span class="upill s-ref">' + pend + ' pending</span>' : '') + (dq ? '<span class="upill s-dq">' + dq + ' DQ</span>' : '') + (pr ? '<span class="upill s-protest">Protest</span>' : '') + (ciTracked(e) ? '<span class="ci-pill in">' + cc.in + '/' + cc.n + ' in</span>' : '') + '</span></button>';
+      '<span class="ci-name">' + esc(evTitle(e)) + '<small>' + [e.entries.length ? units(e, e.entries.length) : '<span style="color:var(--clay)">No athletes entered</span>', eventLayout(e) ? layoutName(eventLayout(e)) : ''].filter(Boolean).join(' · ') + '</small></span>' +
+      '<span class="ci-cnt">' + (finalOf(e.id) ? '<span class="upill s-final">Final</span>' : '') + (pend ? '<span class="upill s-ref">' + pend + ' pending</span>' : '') + (dq ? '<span class="upill s-dq">' + dq + ' DQ</span>' : '') + (pr ? '<span class="upill s-protest">Protest</span>' : '') + (ciTracked(e) ? '<span class="ci-pill in">' + cc.in + '/' + cc.n + ' in</span>' : (cc.scr ? '<span class="ci-pill scr">' + cc.scr + ' scr</span>' : '') + (cc.dns ? '<span class="ci-pill scr">' + cc.dns + ' DNS</span>' : '')) + '</span></button>';
     if (isOpen && !e.entries.length) out += emptyHeatNote(e, 'ump');
     else if (isOpen) secs.forEach(function(s){
       var n = clearsFor(e.id, s.num).length, orig = e.entries.filter(function(x){ return x.num === s.num; })[0] || s;
-      out += '<div class="ci-sec"><span>' + esc(secName(s)) + (s.label ? ' · ' + esc(s.label) : '') + (n ? ' <span class="ok-count">✓ ' + n + ' done</span>' : '') + '</span><span class="ci-cnt" style="text-transform:none;letter-spacing:0">' + (ciTracked(e) ? (slStaged(d, e, orig) ? '<span class="ci-pill staged">Staged</span>' : '') + ciPills(ciCounts(d, e, orig)) : '') + '</span></div><div style="overflow-x:auto"><table class="lanes"><tbody>' + laneRows(d, e, orig, s.lanes, canFlag) + '</tbody></table></div>';
+      out += '<div class="ci-sec"><span>' + esc(secName(s)) + (s.label ? ' · ' + esc(s.label) : '') + (n ? ' <span class="ok-count">✓ ' + n + ' done</span>' : '') + '</span><span class="ci-cnt" style="text-transform:none;letter-spacing:0">' + ((slStaged(d, e, orig) ? '<span class="ci-pill staged">Staged</span>' : '') + ciPills(ciCounts(d, e, orig))) + '</span></div><div style="overflow-x:auto"><table class="lanes"><tbody>' + laneRows(d, e, orig, s.lanes, canFlag) + '</tbody></table></div>';
     });
     out += '</section>';
   });
@@ -4688,7 +4734,9 @@ function renderTiming(){
     var st = evState(e), calls = evCalls(e.id).sort(function(a, b){ return a.sectionNum - b.sectionNum || +a.lane - +b.lane; }), fin = S.finals[e.id], pend = evPending(e.id), dqs = calls.filter(function(c){ return c.status === 'dq'; });
     var cc = ciCounts(d, e), stg = e.entries.filter(function(s){ return slStaged(d, e, s); }).length;
     var chip = { final:'<span class="upill s-final">Final</span>', changed:'<span class="upill s-dq">Changed after final</span>', pending:'<span class="upill s-ref">' + pend.length + ' in progress</span>', ready:'<span class="upill s-reported">Ready to finalize</span>', open:'<span class="upill s-closed">No calls</span>' }[st];
-    out += '<section class="tevent st-' + st + '"><div class="tev-h"><span class="ci-num">' + (e.num != null ? 'EVENT ' + esc(e.num) : '') + '<br><b class="num" style="color:var(--ink)">' + fmt(e.start) + '</b></span><span class="ci-name grow">' + esc(evTitle(e)) + '<small>' + (ciTracked(e) ? cc.in + ' checked in · ' + cc.scr + ' scratched · ' + stg + '/' + e.entries.length + ' heats staged' : cc.n + ' entered · ' + e.entries.length + (e.entries.length === 1 ? ' heat' : ' heats')) + '</small></span>' + chip + '</div>';
+    out += '<section class="tevent st-' + st + '"><div class="tev-h"><span class="ci-num">' + (e.num != null ? 'EVENT ' + esc(e.num) : '') + '<br><b class="num" style="color:var(--ink)">' + fmt(e.start) + '</b></span><span class="ci-name grow">' + esc(evTitle(e)) + '<small>' + (ciTracked(e) ? cc.in + ' checked in · ' + cc.scr + ' scratched · ' + stg + '/' + units(e, e.entries.length) + ' staged' : cc.n + ' entered · ' + units(e, e.entries.length)) + '</small></span>' + chip + '</div>';
+    var outs = []; (e.entries || []).forEach(function(s2){ s2.lanes.forEach(function(l2){ var a2 = athState(d, e, s2, l2); if (a2.code === 'scr' || a2.code === 'dns') outs.push({ s:s2, l:l2, c:a2.code }); }); });
+    if (outs.length) out += '<div class="touts"><b>Not competing</b> ' + outs.map(function(o){ return '<span>' + (e.entries.length > 1 ? esc(secName(o.s)) + ', ' : '') + 'lane ' + esc(o.l.lane) + ' ' + esc(o.l.name || o.l.team) + ' · <b>' + (o.c === 'dns' ? 'DNS' : 'Scratched') + '</b></span>'; }).join('') + '</div>';
     if (calls.length) out += '<div class="tcalls">' + calls.map(function(c){ return '<button class="tcall" data-uopen="' + c.id + '"><span class="lane">' + esc(c.lane) + '</span><span class="tc-body"><span class="tc-t">' + esc(c.athlete + runnerTxt(c)) + ' <span class="muted">· ' + esc(c.sectionLabel) + '</span></span><span class="tc-r">' + esc(ruleLabel(c)) + '</span>' + pipe(c) + '</span></button>'; }).join('') + '</div>';
     else { var n = S.clears.filter(function(c){ return c.evId === e.id; }).length; out += '<p class="tnone">No violations reported' + (n ? ' · ' + n + ' umpire OK' + (n > 1 ? 's' : '') + ' logged' : '') + '.</p>'; }
     var ch = changedAfterFinal(e.id);

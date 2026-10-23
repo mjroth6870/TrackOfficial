@@ -70,7 +70,9 @@ In Firebase: **Authentication → Settings → Authorized domains → Add domain
 On **Setup → Meet**, the meet director can untick **Use clerking in this meet**. Check-in, the start line, call
 announcements and the clerking roles are then hidden; umpires see every entered athlete as competing, and
 Athlete Status follows each athlete from the race through review to the result. Shoe check stays available, with its
-officials named on the director's Setup page. Ticking the box again brings clerking back with nothing lost.
+officials named on the director's Setup page. Line clerks stay available too: at the start line they mark athletes
+who are scratched or did not start (DNS), and umpires and timing see each mark straight away. Ticking the box again
+brings clerking back with nothing lost.
 
 ## Combined events coordinators
 On the meet director's **Setup** page, the **Combined events** card turns on one or two coordinators, each running the
