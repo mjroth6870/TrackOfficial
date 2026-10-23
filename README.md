@@ -72,6 +72,13 @@ announcements and the clerking roles are then hidden; umpires see every entered 
 Athlete Status follows each athlete from the race through review to the result. Shoe check stays available, with its
 officials named on the director's Setup page. Ticking the box again brings clerking back with nothing lost.
 
+## Combined events coordinators
+On the meet director's **Setup** page, the **Combined events** card turns on one or two coordinators, each running the
+women's, men's or both combined events. Every combined-event discipline in the meet program (track and field) then
+goes to them instead of clerking: they check athletes in and scratch them, change start times (umpires see the change),
+note when each event starts and finishes, and see a countdown to the next event once its start time is set.
+Each coordinator has an access code on the **Access** page.
+
 ## Updating the app later
 Replace `index.html` in the repository (**Add file → Upload files**, same name) and commit.
 GitHub Pages republishes within a couple of minutes. If the rules change, paste the new

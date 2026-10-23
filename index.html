@@ -856,6 +856,40 @@ nav.tabs{justify-content:safe center}
 .stchip.sc-entered{background:var(--surface-2);color:var(--ink)}
 .clerk-switch label{flex-wrap:nowrap}
 
+/* ---------- combined events ---------- */
+.ce-coord{display:grid;grid-template-columns:34px minmax(0,1.4fr) minmax(0,1fr);gap:10px;align-items:end;padding:10px 0;border-top:1px solid var(--line)}
+.ce-coord label{display:flex;flex-direction:column;gap:2px;min-width:0}
+.ce-coord .lane{margin-bottom:6px}
+@media (max-width:520px){ .ce-coord{grid-template-columns:34px minmax(0,1fr)} .ce-coord label:last-child{grid-column:2} }
+.ce-top{display:flex;flex-wrap:wrap;gap:4px 16px;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+.ce-ev{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius,12px);margin-bottom:10px;overflow:hidden}
+.ce-ev.next{border:2px solid var(--teal);box-shadow:0 4px 18px rgba(0,0,0,.08)}
+.ce-ev.done{opacity:.8}
+.ce-h{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;flex-wrap:wrap}
+.ce-h .grow{min-width:180px}
+.ce-tog{border:0;background:none;cursor:pointer;padding:4px;color:var(--muted)}
+.ce-tog .chev{display:inline-block;transition:transform .15s}
+.ce-tog[aria-expanded="true"] .chev{transform:rotate(90deg)}
+.ce-kind{font-size:12px;font-weight:800;letter-spacing:.5px;color:var(--muted)}
+.ce-h h3{margin:2px 0 4px;font-family:var(--display);font-size:22px}
+.ce-meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px;color:var(--muted)}
+.ce-badge{font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;border-radius:999px;padding:2px 8px;background:var(--teal);color:#fff}
+.ce-badge.live{background:var(--amber,#F2B92B);color:#1b1300}
+.ce-badge.done{background:var(--surface-2);color:var(--muted);border:1px solid var(--line)}
+.ce-cd{margin-left:auto;background:var(--navy);color:#fff;border-radius:12px;padding:10px 16px;font-size:15px;text-align:center;min-width:170px;font-variant-numeric:tabular-nums}
+.ce-cd b{display:block;font-family:var(--display);font-size:34px;line-height:1.05;letter-spacing:.02em}
+.ce-cd.late{background:var(--clay,#C2410C)}
+.ce-cd .cd-late{font-weight:700}
+@media (max-width:520px){ .ce-cd{margin-left:0;width:100%} }
+.ce-times{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-end;padding:0 14px 12px}
+.ce-times label{display:flex;flex-direction:column;gap:2px;min-width:130px}
+.ce-times label>span{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}
+.ce-times .btn{min-height:40px}
+.ce-ev .ci-sec,.ce-ev .ci-rows{margin:0}
+header.top.stack{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"logo clock" "mid mid"}
+#uJump,#ciJump,#slJump{min-width:0;max-width:100%}
+@media (max-width:600px){ #uJump,#ciJump,#slJump{width:100%!important;flex:1 1 100%!important} }
+
 </style>
 <script>
 /* Firebase backend for the hosted copy (GitHub Pages). Inside Claude the platform supplies shared data,
@@ -1668,7 +1702,7 @@ function callsForDay(d){
   var out = [];
   if (!d) return out;
   d.events.forEach(function(ev){
-    if (ev.start == null) return;
+    if (ev.start == null || ceManaged(ev)) return;
     evTpl(d, ev).calls.forEach(function(c, i){
       out.push({ key: ev.id + '|' + i, ev: ev, idx: i, call: c, t: ev.start - c.min });
     });
@@ -1731,6 +1765,7 @@ function keepAwake(){ try{ if (navigator.wakeLock && !wake) navigator.wakeLock.r
 function tick(){
   var now = nowMin(), d = M && activeDay();
   $('#clockT').textContent = fmtClock(now);
+  if (UI.view === 'ce') ceTick();
   var dt = new Date();
   $('#clockS').innerHTML = esc(dt.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})) + (M && M.settings.sim.on ? '<span class="sim">TEST ' + (M.settings.sim.rate||1) + '×</span>' : '');
   Sync.pill();
@@ -1848,7 +1883,8 @@ function render(){
   $('#btnVoice').setAttribute('aria-pressed', M.settings.voice);
   var main = $('#main');
   updateRunPill(d, nowMin());
-  ({ live:renderLive, checkin:renderCheckin, startline:renderStartLine, status:renderStatus, shoes:renderShoes, shoelog:renderShoeLog, heats:Ump.renderHeats, inbox:Ump.renderInbox, calls:Ump.renderCalls, access:renderAccess, admin:Acct.renderAdmin, schedule:renderSchedule, maps:renderMaps, notes:renderNotes, setup:renderSetup, meets:renderMeets })[UI.view](main);
+  sizeHeader();
+  ({ ce:renderCE, live:renderLive, checkin:renderCheckin, startline:renderStartLine, status:renderStatus, shoes:renderShoes, shoelog:renderShoeLog, heats:Ump.renderHeats, inbox:Ump.renderInbox, calls:Ump.renderCalls, access:renderAccess, admin:Acct.renderAdmin, schedule:renderSchedule, maps:renderMaps, notes:renderNotes, setup:renderSetup, meets:renderMeets })[UI.view](main);
 }
 
 /* ---------- Live ---------- */
@@ -1883,7 +1919,7 @@ function ciPills(c){
   return '<span class="ci-pill in">' + c.in + ' / ' + c.n + ' in</span>' + (c.scr ? '<span class="ci-pill scr">' + c.scr + ' scr</span>' : '') + '<span class="ci-pill">' + c.open + ' to go</span>';
 }
 function ciEvents(d){ return d.events.filter(function(e){ if (!e.entries) e.entries = []; return true; }).sort(function(a, b){ return (a.start == null ? 1e9 : a.start) - (b.start == null ? 1e9 : b.start); }); }
-function ciHeats(d){ var out = []; ciEvents(d).forEach(function(e){ evSecs(e).forEach(function(s, i){ out.push({ e:e, s:s, key:e.id + '|' + i }); }); }); return out; }
+function ciHeats(d){ var out = []; clerkEvents(d).forEach(function(e){ evSecs(e).forEach(function(s, i){ out.push({ e:e, s:s, key:e.id + '|' + i }); }); }); return out; }
 function secName(s){ return s.kind + ' ' + s.num + (s.of ? ' of ' + s.of : ''); }
 function ciRows(d, ev, lanes){
   return lanes.map(function(l){
@@ -1899,7 +1935,7 @@ function ciRows(d, ev, lanes){
 function renderCheckin(main){
   var d = activeDay();
   if (!d){ main.innerHTML = '<div class="card empty">No competition days yet.</div>'; return; }
-  var evs = ciEvents(d);
+  var evs = clerkEvents(d);
   if (!evs.length){ main.innerHTML = '<div class="card empty"><b>No events on ' + esc(d.name) + ' yet.</b><br>Add events on the Schedule, or import the meet program (HY-TEK, AthleticNET or MeetPro) under <b>Setup → Import meet program</b> to load each heat\'s athletes and teams here.</div>'; return; }
   var mode = UI.ciMode || 'heat';
   var top = '<div class="ci-top"><div class="seg" role="group" aria-label="Check-in view"><button data-civ="heat" aria-pressed="' + (mode === 'heat') + '">One heat</button><button data-civ="all" aria-pressed="' + (mode === 'all') + '">All events</button></div>' +
@@ -1909,7 +1945,7 @@ function renderCheckin(main){
 }
 function ciAllView(d){
   var q = (UI.ciQ || '').trim().toLowerCase(), open = UI.ciOpen || (UI.ciOpen = {}), out = '', shown = 0;
-  ciEvents(d).forEach(function(e){
+  clerkEvents(d).forEach(function(e){
     var secs = evSecs(e).map(function(s){ return { s:s, lanes:s.lanes }; });
     var evHit = !q || (e.num + ' ' + evTitle(e)).toLowerCase().indexOf(q) >= 0;
     if (!evHit){
@@ -1953,8 +1989,8 @@ function ciHeatView(d){
       (s.lanes.length ? '<div class="ci-rows">' + ciRows(d, e, s.lanes) + '</div>' : emptyHeatNote(e)) + (slStaged(d, e, s) ? '<div class="sl-warn" style="background:var(--teal-soft);color:var(--teal);font-weight:700">✓ ' + (slStaged(d, e, s).skip ? 'Skipped at the start line' : 'Staged at the start line at ' + fmt(slStaged(d, e, s).at)) + '</div>' : '') + '</section>' +
     '<div class="ci-bar"><button class="btn" data-cinav="-1"' + (i === 0 ? ' disabled' : '') + ' aria-label="Previous heat">‹ Prev</button><div class="sum">' + ciPills(c) + '</div><button class="btn ' + (c.open ? '' : 'go') + '" data-cinav="1"' + (i === list.length - 1 ? ' disabled' : '') + ' aria-label="Next heat">Next ›</button></div>';
 }
-function ciTap(key){
-  var d = activeDay(), cur = d.checkin[key], now = Math.round(nowMin());
+function ciTap(key, dd){
+  var d = dd || activeDay(), cur = d.checkin[key], now = Math.round(nowMin());
   if (!cur) d.checkin[key] = { s:'in', at:now };
   else if (cur.s === 'in') d.checkin[key] = { s:'scr', at:now };
   else delete d.checkin[key];
@@ -1988,8 +2024,8 @@ function slRows(d, e, lanes){
 function renderStartLine(main){
   var d = activeDay();
   if (!d){ main.innerHTML = '<div class="card empty">No competition days yet.</div>'; return; }
-  if (!ciEvents(d).length){ main.innerHTML = '<div class="card empty"><b>No events on ' + esc(d.name) + ' yet.</b><br>Add events on the Schedule, or import the meet program under <b>Setup → Import meet program</b>; heats appear here as the clerks check athletes in.</div>'; return; }
-  var names = roster('lineClerk'); ciEvents(d).forEach(function(e){ if (e.lineClerk && names.indexOf(e.lineClerk) < 0) names.push(e.lineClerk); });
+  if (!clerkEvents(d).length){ main.innerHTML = '<div class="card empty"><b>No events on ' + esc(d.name) + ' yet.</b><br>Add events on the Schedule, or import the meet program under <b>Setup → Import meet program</b>; heats appear here as the clerks check athletes in.</div>'; return; }
+  var names = roster('lineClerk'); clerkEvents(d).forEach(function(e){ if (e.lineClerk && names.indexOf(e.lineClerk) < 0) names.push(e.lineClerk); });
   if (UI.slWho && names.indexOf(UI.slWho) < 0) UI.slWho = '';
   var list = slHeats(d);
   var top = '<div class="ci-top">' + (names.length ? '<label class="row" style="gap:6px">Show <select class="f" id="slWho" style="width:auto"><option value="">All heats</option>' + names.map(function(n){ return '<option value="' + esc(n) + '"' + (n === UI.slWho ? ' selected' : '') + '>' + esc(n) + '\'s heats</option>'; }).join('') + '</select></label>' : '') +
@@ -2255,7 +2291,7 @@ var Sync = (function(){
   function plain(o){ return JSON.parse(JSON.stringify(o)); }
   function base(id){ return 'meets/' + id; }
 
-  function metaDef(m){ return { clerking:m.clerking !== false, owner:m.owner || null, ownerName:m.ownerName || '', archived:!!m.archived, archivedAt:m.archivedAt || '', name:m.name || '', templates:m.templates, officials:m.officials, notes:m.notes, dayOrder:m.days.map(function(d){ return d.id; }), mapOrder:m.maps.map(function(x){ return x.id; }) }; }
+  function metaDef(m){ return { multi:m.multi || { n:0, coords:[] }, clerking:m.clerking !== false, owner:m.owner || null, ownerName:m.ownerName || '', archived:!!m.archived, archivedAt:m.archivedAt || '', name:m.name || '', templates:m.templates, officials:m.officials, notes:m.notes, dayOrder:m.days.map(function(d){ return d.id; }), mapOrder:m.maps.map(function(x){ return x.id; }) }; }
   function dayDef(d){ return { name:d.name, date:d.date || '', defaultTemplateId:d.defaultTemplateId || null, mapId:d.mapId || null, events:d.events }; }
   function mapDef(x){ return { name:x.name, markers:x.markers || {}, src:x.src }; }
   function defsOf(m){ var o = { meta:metaDef(m) }; m.days.forEach(function(d){ o['day:' + d.id] = dayDef(d); }); m.maps.forEach(function(x){ o['map:' + x.id] = mapDef(x); }); return o; }
@@ -2354,6 +2390,7 @@ var Sync = (function(){
     var s = S(m);
     if (!data || !(data.updated > (s.dt.meta || 0))) return false;
     if (typeof data.clerking === 'boolean') m.clerking = data.clerking;
+    if (data.multi) m.multi = data.multi;
     if (data.owner) { m.owner = data.owner; m.ownerName = data.ownerName || ''; } m.archived = data.archived === true; m.archivedAt = data.archivedAt || '';
     m.name = data.name || m.name; if (data.templates) m.templates = data.templates; if (data.officials) m.officials = data.officials; if (data.notes) m.notes = data.notes;
     if (data.dayOrder){
@@ -2988,7 +3025,7 @@ function renderSetup(main){
         '<button class="btn sm" data-cadd style="margin-top:8px">+ Add call</button></div>';
     }).join('') + '<button class="btn primary" id="addTpl">+ Add call scheme</button></div>');
   /* Referee and meet director: Meet, Data, Rulebook. Head clerk: Meet, Data, Alerts, Call schemes, Clerking officials. One full-width row each. */
-  if (role === 'referee' || role === 'director'){ main.innerHTML = '<div class="grid2 rows">' + meetC + dataC + Ump.rulesSection() + (role === 'director' && !clerkOn() ? officialsCard('shoeCheck') : '') + '</div>'; return; }
+  if (role === 'referee' || role === 'director'){ main.innerHTML = '<div class="grid2 rows">' + meetC + dataC + Ump.rulesSection() + (role === 'director' && !clerkOn() ? officialsCard('shoeCheck') : '') + (role === 'director' ? ceSetupCard() : '') + '</div>'; return; }
   if (role === 'headClerk'){ main.innerHTML = '<div class="grid2 rows">' + meetC + dataC + alertsC + schemesC + officialsCard() + '</div>'; return; }
   main.innerHTML = '<div class="grid2">' + (cM ? '' : '<div class="card pad" style="grid-column:1/-1"><b>Meet setup is handled by the meet director, head clerk or referee.</b> <span class="muted">Below are the umpiring settings for your role.</span></div>') +
     (cC ? officialsCard() : '') + (cM ? '<div class="stack">' + meetC + Ump.rulesSection() + '</div>' : '') + alertsC + Ump.setupCards(cM) + schemesC + dataC + '</div>';
@@ -3026,6 +3063,7 @@ main.addEventListener('click', function(e){
   keepAwake();
   if (Acct.click(e)) return;
   if (entMainClick(e)) return;
+  if (ceClick(e)) return;
   if (Ump.click(e)) return;
   /* start line */
   if ((b = t.closest('[data-sllate]'))){
@@ -3049,8 +3087,9 @@ main.addEventListener('click', function(e){
   if ((b = t.closest('[data-slnav]'))){ var sd2 = activeDay(), sl2 = slHeats(sd2), si2 = slIdx(sd2, sl2), sj2 = Math.max(0, Math.min(sl2.length - 1, si2 + (+b.dataset.slnav))); UI.slCursor = sl2[sj2].key; renderStartLine(main); window.scrollTo(0, 0); return; }
   /* check-in */
   if ((b = t.closest('.ci-row[data-ci]'))){
-    ciTap(b.dataset.ci);
-    var y = window.scrollY; renderCheckin(main); window.scrollTo(0, y);
+    var ceSec = b.closest('[data-ceday]');
+    ciTap(b.dataset.ci, ceSec ? day(ceSec.dataset.ceday) : null);
+    var y = window.scrollY; (UI.view === 'ce' ? renderCE : renderCheckin)(main); window.scrollTo(0, y);
     var again = $('[data-ci="' + (window.CSS && CSS.escape ? CSS.escape(b.dataset.ci) : b.dataset.ci) + '"]'); if (again) again.focus({ preventScroll:true });
     return;
   }
@@ -3157,6 +3196,7 @@ main.addEventListener('change', function(e){
     applyCount(); return;
   }
   if (t.id === 'mName'){ M.name = t.value.trim(); save(); render(); return; }
+  if (ceSetupChange(t) || ceChange(t)) return;
   if (t.id === 'mClerk'){ M.clerking = t.checked; save(); render(); toast(t.checked ? 'Clerking is on for this meet' : 'Clerking is off. Umpiring and shoe check carry on without it.'); return; }
   if (t.dataset.df){ var d2 = day(t.closest('[data-day]').dataset.day); d2[t.dataset.df] = t.value || (t.dataset.df === 'mapId' ? null : ''); save(); render(); return; }
   if (t.dataset.set){ M.settings[t.dataset.set] = t.checked; save(); render(); return; }
@@ -3256,7 +3296,15 @@ function autoPickDay(){
   if (today) M.settings.activeDayId = today.id;
   if (!activeDay() && M.days[0]) M.settings.activeDayId = M.days[0].id;
 }
-function sizeHeader(){ document.documentElement.style.setProperty('--hdr', $('#hdr').offsetHeight + 'px'); }
+/* The banner keeps logo, meet controls and clock on one line while they fit, and stacks the controls under them when they don't. */
+function fitHeader(){
+  var h = $('#hdr'), lg = $('.applogo', h), mid = $('.hmid', h), ck = $('.clock', h); if (!h || !lg || !mid || !ck) return;
+  h.classList.remove('stack');
+  if (getComputedStyle(h).gridTemplateAreas.indexOf('mid mid') >= 0) return;
+  var a = lg.getBoundingClientRect(), b = mid.getBoundingClientRect(), c = ck.getBoundingClientRect();
+  if (a.right + 12 > b.left || b.right + 12 > c.left) h.classList.add('stack');
+}
+function sizeHeader(){ fitHeader(); document.documentElement.style.setProperty('--hdr', $('#hdr').offsetHeight + 'px'); }
 window.addEventListener('resize', sizeHeader);
 try{ new ResizeObserver(sizeHeader).observe(document.getElementById('hdr')); }catch(e){ setInterval(sizeHeader, 1000); }
 document.addEventListener('visibilitychange', function(){ if (!document.hidden) keepAwake(); });
@@ -3278,13 +3326,14 @@ var ROLE_DEFS = {
   assistant: { label:'Chief\'s Assistant',group:'ump',   hint:'Shares the chief umpire\'s review queue' },
   referee:   { label:'Referee',           group:'ump',   hint:'Decides DQs and protests' },
   timing:    { label:'Timing',            group:'ump',   hint:'Enters decisions and marks events final' },
-  shoeCheck: { label:'Shoe Check',        group:'shoe',  pick:'clerk', hint:'Looks up athletes and records shoe photos with pass/fail' }
+  shoeCheck: { label:'Shoe Check',        group:'shoe',  pick:'clerk', hint:'Looks up athletes and records shoe photos with pass/fail' },
+  multi:     { label:'Combined Events',   group:'meet',  hint:'Runs the combined events: check-in, start times, start and finish, and the countdown to the next event' }
 };
 /* Where each role appears on the Change role screen, top to bottom. */
-var PICK_ORDER = { meet:['director','timing','shoeCheck'], clerk:['headClerk','clerk','lineClerk'], ump:['referee','chief','assistant','umpire'] };
+var PICK_ORDER = { meet:['director','timing','shoeCheck','multi'], clerk:['headClerk','clerk','lineClerk'], ump:['referee','chief','assistant','umpire'] };
 function pickGroup(k){ var g = null; Object.keys(PICK_ORDER).forEach(function(x){ if (PICK_ORDER[x].indexOf(k) >= 0) g = x; }); return g || ROLE_DEFS[k].group; }
 var GROUP_LABEL = { meet:'Meet', clerk:'Clerking', ump:'Umpiring', shoe:'Clerking' };
-var TAB_LABEL = { live:'Live Calls', checkin:'Check-in', startline:'Start Line', status:'Athlete Status', heats:'Heats', inbox:'', calls:'All Calls', schedule:'Schedule', maps:'Maps', notes:'Clerking Notes', setup:'Setup', access:'Access', meets:'Meets', shoes:'Shoe Check', shoelog:'Shoe Checks' };
+var TAB_LABEL = { ce:'Combined Events', live:'Live Calls', checkin:'Check-in', startline:'Start Line', status:'Athlete Status', heats:'Heats', inbox:'', calls:'All Calls', schedule:'Schedule', maps:'Maps', notes:'Clerking Notes', setup:'Setup', access:'Access', meets:'Meets', shoes:'Shoe Check', shoelog:'Shoe Checks' };
 var ROLE_TABS = {
   director:  ['status','schedule','calls','maps','notes','setup','access','meets'],
   headClerk: ['live','checkin','startline','status','schedule','maps','notes','setup','access','meets'],
@@ -3295,7 +3344,8 @@ var ROLE_TABS = {
   assistant: ['inbox','heats','calls','shoelog','status','meets'],
   referee:   ['inbox','calls','heats','shoelog','status','setup','access','meets'],
   timing:    ['inbox','calls','status','meets'],
-  shoeCheck: ['shoes','meets']
+  shoeCheck: ['shoes','meets'],
+  multi:     ['ce','status','meets']
 };
 UI.role = ROLE_DEFS[lsGet('to.role', '')] ? lsGet('to.role', '') : '';
 function rgroup(){ return (ROLE_DEFS[UI.role] || {}).group || ''; }
@@ -3311,10 +3361,11 @@ function canSetupUmp(){ return ['director','chief','referee'].indexOf(UI.role) >
 /* This device's position at the open meet: u3, ck2, lc1, hc1, chief, referee… */
 function myPos(){ return M ? lsGet('to.me.' + M.id, '') : ''; }
 function setMyPos(p){ if (M) lsSet('to.me.' + M.id, p); }
-var POS_ROLE = { hc:'headClerk', ck:'clerk', lc:'lineClerk', sc:'shoeCheck', u:'umpire' };
+var POS_ROLE = { hc:'headClerk', ck:'clerk', lc:'lineClerk', sc:'shoeCheck', u:'umpire', ce:'multi' };
 var POS_RANK = { hc:'headClerk', ck:'clerk', lc:'lineClerk', sc:'shoeCheck' };
-function posRole(p){ var m = String(p || '').match(/^(hc|ck|lc|sc|u)(\d+)$/); return m ? POS_ROLE[m[1]] : ROLE_DEFS[p] ? p : ''; }
+function posRole(p){ var m = String(p || '').match(/^(hc|ck|lc|sc|u|ce)(\d+)$/); return m ? POS_ROLE[m[1]] : ROLE_DEFS[p] ? p : ''; }
 function posName(p){
+  var c = String(p || '').match(/^ce(\d)$/); if (c && M) return ((ceCoords()[+c[1] - 1] || {}).name || '').trim();
   var m = String(p || '').match(/^(hc|ck|lc|sc)(\d+)$/);
   if (m && M) return ((M.officials[POS_RANK[m[1]]] || [])[+m[2] - 1] || '').trim();
   return '';
@@ -3350,7 +3401,7 @@ function roleDialog(firstRun){
     '<div class="rp-groups" role="radiogroup" aria-labelledby="rpT">' +
     groups.map(function(g){
       return '<div class="rp-grp g-' + g + '"><div class="rp-gh">' + esc(GROUP_LABEL[g]) + '</div><div class="rp-grid">' +
-        PICK_ORDER[g].filter(function(k){ return k !== 'assistant' || d.useAssistant || cur === 'assistant'; }).map(function(k){
+        PICK_ORDER[g].filter(function(k){ return (k !== 'assistant' || d.useAssistant || cur === 'assistant') && (k !== 'multi' || multiOn() || cur === 'multi'); }).map(function(k){
           return '<label class="rp-card"><input type="radio" name="rPick" value="' + k + '"' + (k === cur ? ' checked' : '') + ' aria-describedby="rpHint"><span>' + esc(ROLE_DEFS[k].label) + '</span></label>';
         }).join('') + '</div></div>';
     }).join('') + '</div>' +
@@ -3371,6 +3422,9 @@ function roleDialog(firstRun){
       for (var i = 1; i <= n; i++){ var nm = ((d.umpires['u' + i] || {}).name) || ''; opts += '<option value="u' + i + '"' + (p === 'u' + i ? ' selected' : '') + '>Umpire ' + i + (nm ? ' – ' + esc(nm) : '') + '</option>'; }
       el.innerHTML = '<label class="lbl" for="rWhoSel">Which umpire are you?</label><select class="f" id="rWhoSel"><option value="">Not set</option>' + opts + '</select>';
       extra = ' Your number fills in your post on every report.';
+    } else if (r === 'multi'){
+      ceCoords().forEach(function(x, i){ opts += '<option value="ce' + (i + 1) + '"' + (p === 'ce' + (i + 1) ? ' selected' : '') + '>Coordinator ' + (i + 1) + (x.name ? ' – ' + esc(x.name) : '') + ' · ' + esc(ceScopeLabel(x.scope)) + '</option>'; });
+      el.innerHTML = opts ? '<label class="lbl" for="rWhoSel">Which coordinator are you?</label><select class="f" id="rWhoSel">' + opts + '</select>' : '';
     } else if (ROLE_DEFS[r].group === 'clerk' || r === 'shoeCheck'){
       var pre = r === 'headClerk' ? 'hc' : r === 'clerk' ? 'ck' : r === 'shoeCheck' ? 'sc' : 'lc';
       (M.officials[r] || []).forEach(function(x, i){ if ((x || '').trim()) opts += '<option value="' + pre + (i + 1) + '"' + (p === pre + (i + 1) ? ' selected' : '') + '>' + esc(x) + '</option>'; });
@@ -3389,7 +3443,7 @@ function roleDialog(firstRun){
    ===================================================================== */
 var ST_LABEL = { entered:'Entered', out:'Not checked in', in:'Checked in', late:'Late check-in', track:'On the track', raced:'Competed', review:'Call under review', dq:'Disqualified', nodq:'Cleared on review', final:'Final', dqfinal:'DQ · final', dns:'Did not start', scr:'Scratched', skip:'Heat not run' };
 function athState(d, e, s, l){
-  var off = !clerkOn(), ci = off ? null : d.checkin && d.checkin[ciKey(e, l)], stg = off ? null : slStaged(d, e, s);
+  var off = !ciTracked(e), ci = off ? null : d.checkin && d.checkin[ciKey(e, l)], stg = off ? null : slStaged(d, e, s);
   var calls = Ump.laneCalls(e.id, s.num, l.lane), heatCalls = Ump.heatCalls(e.id, s.num), clears = Ump.clearsFor(e.id, s.num), fin = Ump.finalOf(e.id);
   var raced = clears.length > 0 || heatCalls.length > 0 || !!fin;
   var openP = function(c){ return c.protest && c.protest.status === 'open'; };
@@ -3408,15 +3462,15 @@ function athState(d, e, s, l){
   else if (stg) code = 'track';
   else if (ci) code = ci.late ? 'late' : 'in';
   else code = off ? 'entered' : 'out';
-  return { code:code, label:ST_LABEL[code], ci:ci, stg:stg, calls:calls, clears:clears, fin:fin, raced:raced, pend:pend, dq:dq };
+  return { code:code, label:ST_LABEL[code], ci:ci, stg:stg, calls:calls, clears:clears, fin:fin, raced:raced, pend:pend, dq:dq, off:off, ce:ceManaged(e) };
 }
 function stChip(st){ return '<span class="stchip sc-' + st.code + '">' + esc(st.label) + '</span>'; }
 function athPipe(st){
   var steps = [];
-  var ci = st.ci, off = !clerkOn();
+  var ci = st.ci, off = st.off;
   if (!off) steps.push(ci && ci.s === 'scr' ? ['Check-in','skip','Scratched'] : ci ? ['Check-in','done',(ci.late ? 'Late · ' : '') + fmt(ci.at)] : st.code === 'dns' ? ['Check-in','skip','Missed'] : ['Check-in','now','Waiting']);
   var stage = st.code === 'scr' ? ['Start line','skip',''] : st.stg ? (st.stg.skip ? ['Start line','skip','Heat not run'] : ['Start line', ci ? 'done' : 'skip', ci ? 'Staged ' + fmt(st.stg.at) : 'Not at start']) : ['Start line', ci ? 'now' : 'todo', ''];
-  if (!off) steps.push(stage);
+  if (!off && !st.ce) steps.push(stage);
   var race = st.code === 'scr' || st.code === 'dns' || st.code === 'skip' ? ['Race','skip',''] : st.raced ? ['Race','done', st.clears.length ? st.clears.length + ' umpire OK' + (st.clears.length > 1 ? 's' : '') : 'Run'] : st.stg ? ['Race','now','On track'] : ['Race','todo',''];
   steps.push(race);
   var call = st.calls.length ? ['Umpires', st.pend ? 'now' : 'done', st.pend ? Ump.callStage(st.calls) : st.dq ? 'DQ' : 'No DQ'] : st.raced && st.code !== 'dns' ? ['Umpires','done','No calls'] : ['Umpires', st.code === 'scr' || st.code === 'dns' ? 'skip' : 'todo', ''];
@@ -3460,7 +3514,10 @@ function statusEvents(d){
     e.entries.forEach(function(s){ var h = heatSummary(d, e, s); if (h.stg) stg++; if (h.clr || h.calls.length) um++; pend += h.pend; calls += h.calls.length; });
     var cl = evTpl(d, e).calls, made = cl.filter(function(c, i){ var x = d.status[e.id + '|' + i]; return x; }).length;
     var umpd = Ump.isUmpired(e);
-    var bar = stageBar([].concat(clerkOn() ? [
+    var ceE = ceManaged(e), ceR = e.ceRun || {};
+    var bar = stageBar([].concat(ceE ? [
+      ['Check-in', !cc.n ? 'todo' : !cc.open ? 'done' : cc.in ? 'now' : 'todo', cc.in + '/' + (cc.n - cc.scr) + (cc.scr ? ' · ' + cc.scr + ' scr' : '')],
+      ['Event', ceR.end != null ? 'done' : ceR.start != null ? 'now' : 'todo', ceR.end != null ? fmt(ceR.start) + '–' + fmt(ceR.end) : ceR.start != null ? 'Started ' + fmt(ceR.start) : 'Not started']] : clerkOn() ? [
       ['Calls', made === cl.length && cl.length ? 'done' : made ? 'now' : 'todo', made + '/' + cl.length],
       ['Check-in', !cc.n ? 'todo' : !cc.open ? 'done' : cc.in ? 'now' : 'todo', cc.in + '/' + (cc.n - cc.scr) + (cc.scr ? ' · ' + cc.scr + ' scr' : '')],
       ['Staged', !H ? 'todo' : stg === H ? 'done' : stg ? 'now' : 'todo', stg + '/' + H + ' heats']] : [], [
@@ -3505,7 +3562,7 @@ var APP_URL = window.__toStandalone ? location.origin + location.pathname : 'htt
 var pendingJoin = null;
 function readJoin(){
   var h = ''; try{ h = (location.hash || '').replace(/^#/, ''); }catch(e){}
-  var m = h.match(/^join~([A-Za-z0-9_\-]+)~(director|shoeCheck|chief|assistant|referee|timing|u\d{1,2}|hc\d{1,2}|ck\d{1,2}|lc\d{1,2}|sc\d)$/);
+  var m = h.match(/^join~([A-Za-z0-9_\-]+)~(director|shoeCheck|chief|assistant|referee|timing|u\d{1,2}|hc\d{1,2}|ck\d{1,2}|lc\d{1,2}|sc\d|ce\d)$/);
   if (!m || lsGet('to.joined', '') === h) return;
   pendingJoin = { raw:h, meet:m[1], pos:m[2] };
 }
@@ -3532,6 +3589,7 @@ function accessList(){
   var d = Ump.offData(), N = Math.max(1, Math.min(40, d.umpireCount || 1)), out = [];
   out.push({ pos:'director', title:'Meet Director', name:'', group:'meet', detail:ROLE_DEFS.director.hint });
   out.push({ pos:'timing', title:'Timing', name:d.timing, group:'meet', detail:ROLE_DEFS.timing.hint });
+  if (multiOn()) ceCoords().forEach(function(x, i){ out.push({ pos:'ce' + (i + 1), title:'Combined Events ' + (i + 1), name:x.name || '', group:'meet', detail:ceScopeLabel(x.scope) + ' combined events: check-in, start times and countdown' }); });
   [['headClerk','hc'],['clerk','ck'],['lineClerk','lc'],['shoeCheck','sc']].filter(function(r){ return clerkOn() || r[0] === 'shoeCheck'; }).forEach(function(r){
     var list = M.officials[r[0]] || [], any = false;
     list.forEach(function(nm, i){ if ((nm || '').trim()){ any = true; out.push({ pos:r[1] + (i + 1), title:ROLE_DEFS[r[0]].label, name:nm.trim(), group:'clerk', detail:ROLE_DEFS[r[0]].hint }); } });
@@ -3654,7 +3712,7 @@ function legsText(l){
   if (g) return g.map(function(n, i){ return n ? (i + 1) + '. ' + n : ''; }).filter(Boolean).join(' · ');
   return l.members && l.members.length ? l.members.join(' · ') : '';
 }
-function canEditEntries(){ return (clerkOn() ? ['director', 'headClerk', 'clerk'] : ['director']).indexOf(UI.role) >= 0 && Sync.canWrite(); }
+function canEditEntries(){ return (clerkOn() ? ['director', 'headClerk', 'clerk', 'multi'] : ['director', 'multi']).indexOf(UI.role) >= 0 && Sync.canWrite(); }
 function entCount(e){ return (e.entries || []).reduce(function(n, s){ return n + s.lanes.length; }, 0); }
 function entButton(e, big){
   if (!canEditEntries()) return '';
@@ -3790,6 +3848,119 @@ function mergeEntries(old, inc){
   old.forEach(function(s){ s.lanes.forEach(function(l){ if (laneLegs(l)) legs[key(l)] = l.legs; }); });
   inc.forEach(function(s){ s.lanes.forEach(function(l){ var g = legs[key(l)]; if (g && !l.legs) l.legs = g.slice(); }); });
   return inc;
+}
+
+
+/* =====================================================================
+   Combined events — up to two coordinators run the multi-events (every
+   discipline, track and field) instead of clerking: they check athletes in,
+   move start times, note when each event starts and ends, and see a countdown
+   to the next event.
+   ===================================================================== */
+var CE_RE = /pentathlon|heptathlon|decathlon|octathlon|triathlon|tetrathlon|icosathlon|combined\s*event|multi-?event|\bpent\b|\bhept\b|\bdec\b/i;
+function isMultiEv(e){ return CE_RE.test((e.fullName || '') + ' ' + (e.name || '')); }
+function ceCoords(){ var m = (M && M.multi) || {}; return (m.coords || []).slice(0, Math.max(0, Math.min(2, m.n || 0))); }
+function multiOn(){ return !!(M && M.multi && M.multi.n > 0); }
+function ceManaged(e){ return multiOn() && isMultiEv(e); }
+/* Check-in status counts for an event when the clerks run it, or when a coordinator does. */
+function ciTracked(e){ return clerkOn() || (e ? ceManaged(e) : multiOn()); }
+function clerkEvents(d){ return ciEvents(d).filter(function(e){ return !ceManaged(e); }); }
+function ceScopeLabel(s){ return s === 'Men' ? 'Men' : s === 'Women' ? 'Women' : 'Men and women'; }
+function ceGenderOk(e, scope){
+  if (!scope || scope === 'Both') return true;
+  var g = ((e.gender || '') + ' ' + (e.fullName || '')).toLowerCase();
+  return scope === 'Women' ? /\b(women|girls|female|w)\b/.test(g) : /\b(men|boys|male|m)\b/.test(g) && !/\b(women|girls)\b/.test(g);
+}
+function ceMyScope(){ var m = String(myPos()).match(/^ce(\d)$/), c = m ? ceCoords()[+m[1] - 1] : null; return c ? c.scope || 'Both' : 'Both'; }
+function ceType(e){ var m = ((e.fullName || '') + ' ' + (e.name || '')).match(/(pentathlon|heptathlon|decathlon|octathlon|triathlon|tetrathlon|icosathlon)/i); return m ? m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase() : 'Combined events'; }
+function ceDiscipline(e){ var n = e.name || ''; return n.replace(CE_RE, '').replace(/^\s*[-–:]\s*/, '').trim() || n; }
+
+/* ---------- Setup (meet director) ---------- */
+function ceSetupCard(){
+  var m = M.multi || { n:0, coords:[] }, n = Math.max(0, Math.min(2, m.n || 0)), found = 0;
+  M.days.forEach(function(d){ d.events.forEach(function(e){ if (isMultiEv(e)) found++; }); });
+  var rows = '';
+  for (var i = 0; i < n; i++){
+    var c = (m.coords || [])[i] || {};
+    rows += '<div class="ce-coord" data-ce="' + i + '"><span class="lane">' + (i + 1) + '</span><label><span class="lbl">Coordinator ' + (i + 1) + '</span><input class="f" data-cename value="' + esc(c.name || '') + '" placeholder="Name"></label>' +
+      '<label><span class="lbl">Runs</span><select class="f" data-cescope>' + ['Women', 'Men', 'Both'].map(function(x){ return '<option value="' + x + '"' + ((c.scope || 'Both') === x ? ' selected' : '') + '>' + (x === 'Both' ? 'Men and women' : x) + '</option>'; }).join('') + '</select></label></div>';
+  }
+  return '<div class="card pad" id="ceCard"><h2>Combined events</h2>' +
+    '<p class="hint" style="margin-top:0">Coordinators run every combined event from the meet program (pentathlon, heptathlon, decathlon and the rest, field events included) instead of clerking. They check athletes in and scratch them, adjust start times, note when each event starts and finishes, and get a countdown to the next event. Umpires see the races in their heats at the coordinator\'s times.</p>' +
+    '<label class="row" style="gap:8px;margin:6px 0 4px">Coordinators <select class="f" data-cecount style="width:auto">' + [0, 1, 2].map(function(x){ return '<option value="' + x + '"' + (x === n ? ' selected' : '') + '>' + (x ? x : 'None — clerking runs them') + '</option>'; }).join('') + '</select></label>' +
+    rows + '<p class="hint" style="margin-bottom:0">' + (found ? found + ' combined-event discipline' + (found === 1 ? '' : 's') + ' found in this meet.' : 'No combined events found in this meet yet. They are picked up from the event names when the meet program is imported.') + (n ? ' Each coordinator gets an access code on the Access page.' : '') + '</p></div>';
+}
+function ceSetupChange(t){
+  if (!M) return false;
+  var m = M.multi = M.multi || { n:0, coords:[] }; m.coords = m.coords || [];
+  if (t.dataset.cecount != null){ m.n = +t.value; while (m.coords.length < m.n) m.coords.push({ name:'', scope:'Both' }); save(); render(); toast(m.n ? m.n + ' combined events coordinator' + (m.n === 1 ? '' : 's') + ' on. Clerking no longer runs the combined events.' : 'Combined events are back with clerking.'); return true; }
+  var row = t.closest('[data-ce]'); if (!row) return false;
+  var c = m.coords[+row.dataset.ce] = m.coords[+row.dataset.ce] || { name:'', scope:'Both' };
+  if (t.dataset.cename != null){ c.name = t.value.trim(); save(); return true; }
+  if (t.dataset.cescope != null){ c.scope = t.value; save(); render(); return true; }
+  return false;
+}
+
+/* ---------- The coordinator's screen ---------- */
+function ceEventsFor(scope){
+  var out = [];
+  M.days.forEach(function(d){ ciEvents(d).forEach(function(e){ if (ceManaged(e) && ceGenderOk(e, scope)) out.push({ d:d, e:e }); }); });
+  return out.sort(function(a, b){ return M.days.indexOf(a.d) - M.days.indexOf(b.d) || (a.e.start == null ? 1e9 : a.e.start) - (b.e.start == null ? 1e9 : b.e.start) || (a.e.num || 0) - (b.e.num || 0); });
+}
+function ceNext(list){ for (var i = 0; i < list.length; i++){ var r = list[i].e.ceRun || {}; if (r.start == null) return list[i]; } return null; }
+function cdText(target){
+  var diff = Math.round((target - nowMin()) * 60), late = diff < 0, a = Math.abs(diff), h = Math.floor(a / 3600), m = Math.floor(a % 3600 / 60), s = a % 60;
+  var t = (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(s).padStart(2, '0');
+  return late ? '<span class="cd-late">Start time passed · ' + t + ' ago</span>' : 'Starts in <b>' + t + '</b>';
+}
+function ceTick(){ $$('[data-cd]').forEach(function(el){ el.innerHTML = cdText(+el.dataset.cd); el.classList.toggle('late', +el.dataset.cd < nowMin()); }); }
+function renderCE(main){
+  var scope = ceMyScope(), list = ceEventsFor(scope), ad = activeDay();
+  if (!multiOn()){ main.innerHTML = '<div class="card empty"><b>Combined events coordinators are turned off for this meet.</b><br>The meet director turns them on under Setup.</div>'; return; }
+  if (!list.length){ main.innerHTML = '<div class="card empty"><b>No ' + (scope === 'Both' ? '' : scope.toLowerCase() + '\'s ') + 'combined events in this meet.</b><br>They come from the meet program: events named Pentathlon, Heptathlon, Decathlon and so on.</div>'; return; }
+  var nx = ceNext(list), open = UI.ceOpen || (UI.ceOpen = {}), lastDay = null, html = '';
+  html += '<div class="ce-top"><div><b>' + esc(ceScopeLabel(scope)) + '</b> · ' + list.length + ' events</div>' + (nx ? '<div class="muted">Next: ' + esc(evTitle(nx.e)) + (nx.e.start != null ? ' at ' + fmt(nx.e.start) : '') + '</div>' : '<div class="muted">Every event has started.</div>') + '</div>';
+  list.forEach(function(x){
+    var d = x.d, e = x.e, r = e.ceRun || {}, isNext = nx && nx.e === e, done = r.end != null, c = ciCounts(d, e);
+    if (d !== lastDay){ html += '<h2 class="section-title">' + esc(d.name) + (d.date ? ' · ' + esc(d.date) : '') + '</h2>'; lastDay = d; }
+    var isOpen = open[e.id] != null ? open[e.id] : !done;
+    var cd = isNext && e.start != null && d === ad ? '<div class="ce-cd" data-cd="' + e.start + '">' + cdText(e.start) + '</div>' : '';
+    html += '<section class="ce-ev' + (isNext ? ' next' : '') + (done ? ' done' : '') + '" data-ceday="' + d.id + '" data-ceev="' + e.id + '">' +
+      '<div class="ce-h"><button class="ce-tog" data-cetog="' + e.id + '" aria-expanded="' + isOpen + '"><span class="chev" aria-hidden="true">▶</span></button>' +
+        '<div class="grow"><div class="ce-kind">' + (e.num != null ? 'EVENT ' + esc(e.num) + ' · ' : '') + esc((e.gender ? e.gender + ' ' : '') + ceType(e)).toUpperCase() + '</div><h3>' + esc(ceDiscipline(e)) + '</h3>' +
+        '<div class="ce-meta">' + (e.entries.length ? e.entries.length + ' ' + (e.entries[0].kind || 'heat').toLowerCase() + (e.entries.length === 1 ? '' : 's') : 'No athletes entered') + ' · ' + ciPills(c) + (isNext ? '<span class="ce-badge">Next</span>' : '') + (done ? '<span class="ce-badge done">Finished</span>' : r.start != null ? '<span class="ce-badge live">Under way</span>' : '') + '</div></div>' + cd + '</div>' +
+      '<div class="ce-times">' +
+        '<label><span>Scheduled start</span><input class="f" type="time" data-cetime="start" value="' + toHHMM(e.start) + '"></label>' +
+        '<label><span>Started</span>' + (r.start != null ? '<input class="f" type="time" data-cetime="run.start" value="' + toHHMM(r.start) + '">' : '<button class="btn go" data-cemark="start">Start now</button>') + '</label>' +
+        '<label><span>Finished</span>' + (r.end != null ? '<input class="f" type="time" data-cetime="run.end" value="' + toHHMM(r.end) + '">' : '<button class="btn" data-cemark="end"' + (r.start == null ? ' disabled' : '') + '>Finish now</button>') + '</label>' +
+        (r.start != null || r.end != null ? '<button class="linkbtn" data-cemark="clear">Clear times</button>' : '') +
+      '</div>';
+    if (isOpen){
+      if (!e.entries.length) html += emptyHeatNote(e);
+      else e.entries.forEach(function(s){ html += '<div class="ci-sec"><span>' + esc(secName(s)) + (s.label ? ' · ' + esc(s.label) : '') + '</span><span class="ci-cnt" style="text-transform:none;letter-spacing:0">' + ciPills(ciCounts(d, e, s)) + '</span></div><div class="ci-rows">' + ciRows(d, e, s.lanes) + '</div>'; });
+    }
+    html += '</section>';
+  });
+  main.innerHTML = '<div class="ci-legend"><span><i></i>Not checked in</span><span><i style="background:var(--ci-in)"></i>Tap once — checked in</span><span><i style="background:var(--ci-scr)"></i>Tap twice — scratched</span><span>Tap again to clear</span></div>' + html;
+}
+function ceFind(el){ var sec = el.closest('[data-ceev]'); if (!sec) return null; var d = day(sec.dataset.ceday), e = d && d.events.filter(function(x){ return x.id === sec.dataset.ceev; })[0]; return e ? { d:d, e:e } : null; }
+function ceClick(ev){
+  var b = ev.target.closest('[data-cetog],[data-cemark]'); if (!b || UI.view !== 'ce') return false;
+  if (b.dataset.cetog){ var o = UI.ceOpen || (UI.ceOpen = {}), cur = o[b.dataset.cetog]; var sec = b.closest('.ce-ev'); o[b.dataset.cetog] = cur != null ? !cur : sec.classList.contains('done'); var y = window.scrollY; renderCE($('#main')); window.scrollTo(0, y); return true; }
+  var f = ceFind(b); if (!f) return true;
+  var r = f.e.ceRun = f.e.ceRun || {}, now = Math.round(nowMin()), a = b.dataset.cemark;
+  if (a === 'start'){ r.start = now; toast(evTitle(f.e) + ' started at ' + fmt(now)); }
+  else if (a === 'end'){ r.end = now; toast(evTitle(f.e) + ' finished at ' + fmt(now) + '. Set the next event\'s start time to start its countdown.'); }
+  else if (a === 'clear'){ delete f.e.ceRun; }
+  save(); var y2 = window.scrollY; renderCE($('#main')); window.scrollTo(0, y2); return true;
+}
+function ceChange(t){
+  if (!t.dataset.cetime || UI.view !== 'ce') return false;
+  var f = ceFind(t); if (!f) return true;
+  var v = t.value ? fromHHMM(t.value) : null, k = t.dataset.cetime;
+  if (k === 'start'){ f.e.start = v; f.d.events.sort(function(a, b){ return (a.start == null ? 1e9 : a.start) - (b.start == null ? 1e9 : b.start); }); toast(evTitle(f.e) + (v == null ? ': start time cleared' : ' now starts at ' + fmt(v)) + '. Umpires see the change.'); }
+  else { var r = f.e.ceRun = f.e.ceRun || {}; if (v == null) delete r[k.slice(4)]; else r[k.slice(4)] = v; }
+  save(); var y = window.scrollY; renderCE($('#main')); window.scrollTo(0, y); return true;
 }
 
 /* =====================================================================
@@ -4266,16 +4437,18 @@ function meChip(e, block){
   return '<div class="me-chip' + (block ? ' block' : '') + '"><span class="lane">' + esc(me.slice(1)) + '</span><span><small>Umpire ' + esc(me.slice(1)) + '</small><b>' + esc(name || 'Name not set') + '</b></span>' + posts + '</div>';
 }
 function clerkLine(d, e, s){
-  if (!clerkOn()) return '';
+  if (!ciTracked(e)) return '';
   var c = ciCounts(d, e, s), stg = slStaged(d, e, s);
-  var t = '<div class="clerkline"><span class="cl-h">Clerking</span>' +
+  var ce = ceManaged(e), r = e.ceRun || {};
+  var t = '<div class="clerkline"><span class="cl-h">' + (ce ? 'Combined events' : 'Clerking') + '</span>' +
     '<span class="ci-pill in">' + c.in + ' of ' + c.n + ' checked in</span>' + (c.scr ? '<span class="ci-pill scr">' + c.scr + ' scratched</span>' : '') + (c.open ? '<span class="ci-pill">' + c.open + ' not checked in</span>' : '') +
-    (stg ? (stg.skip ? '<span class="ci-pill">Heat not run</span>' : '<span class="ci-pill staged">On the track · staged ' + fmt(stg.at) + '</span>') : '<span class="ci-pill">Not staged yet</span>') + '</div>';
+    (ce ? (r.end != null ? '<span class="ci-pill">Finished ' + fmt(r.end) + '</span>' : r.start != null ? '<span class="ci-pill staged">Under way · started ' + fmt(r.start) + '</span>' : '<span class="ci-pill">Not started</span>')
+      : stg ? (stg.skip ? '<span class="ci-pill">Heat not run</span>' : '<span class="ci-pill staged">On the track · staged ' + fmt(stg.at) + '</span>') : '<span class="ci-pill">Not staged yet</span>') + '</div>';
   return t;
 }
 function laneRows(d, e, s, lanes, canFlag){
   return lanes.map(function(l){
-    var cs = laneCalls(e.id, s.num, l.lane), st = clerkOn() ? ciState(d, e, l) : 'na', x = st ? d.checkin[ciKey(e, l)] : null, stg = slStaged(d, e, s);
+    var cs = laneCalls(e.id, s.num, l.lane), st = ciTracked(e) ? ciState(d, e, l) : 'na', x = st ? d.checkin[ciKey(e, l)] : null, stg = slStaged(d, e, s);
     var tag = st === 'na' ? '' : st === 'in' ? '<span class="ln-st in">' + (x.late ? 'Late check-in' : 'Checked in') + '</span>' : st === 'scr' ? '<span class="ln-st scr">Scratched · empty lane</span>' : '<span class="ln-st out">' + (stg ? 'Not at start' : 'Not checked in') + '</span>';
     return '<tr class="lr-' + (st || 'out') + '"><td><span class="lane">' + esc(l.lane) + '</span></td>' +
       '<td><div class="ath">' + esc(l.name || l.team) + '<small>' + esc([l.bib ? '#' + l.bib : '', l.team && l.team !== l.name ? l.team : ''].filter(Boolean).join(' · ')) + (isRelayLane(l) ? '<br>' + esc(legsText(l)) : '') + '</small>' + tag + '</div></td>' +
@@ -4291,7 +4464,7 @@ function renderHeats(main){
   var curE = mode === 'heat' && list.length ? list[heatIdx(list)].e : null;
   var top = '<div class="ci-top"><div class="seg" role="group" aria-label="Heats view"><button data-uvm="heat" aria-pressed="' + (mode === 'heat') + '">One heat</button><button data-uvm="all" aria-pressed="' + (mode === 'all') + '">All events</button></div>' + meChip(curE) +
     (mode === 'all' ? '<input class="f" type="search" id="uSearch" placeholder="Find event, athlete, team or bib" value="' + esc(S.q) + '" aria-label="Search heats" style="flex:1 1 220px">' : '') + '</div>';
-  var legend = !clerkOn() ? '' : '<div class="ci-legend"><span><i style="background:var(--ci-in)"></i>Checked in — competing</span><span><i style="background:var(--surface-2)"></i>Not checked in</span><span><i style="background:var(--ci-scr)"></i>Scratched — lane empty</span></div>';
+  var legend = !ciTracked() ? '' : '<div class="ci-legend"><span><i style="background:var(--ci-in)"></i>Checked in — competing</span><span><i style="background:var(--surface-2)"></i>Not checked in</span><span><i style="background:var(--ci-scr)"></i>Scratched — lane empty</span></div>';
   var b = banners() + (live() && !S.book && UI.role === 'referee' ? '<div class="banner">No rulebook chosen for this meet. Pick one under <b>Setup</b> so every call cites the right rule number.</div>' : '');
   if (!list.length){ main.innerHTML = b + '<div class="card empty"><b>No heats to umpire on ' + esc(d.name) + '.</b><br>' + (ciEvents(d).length ? 'Every event on this day is a field event or set to no umpires.' : 'Heats appear once the meet program with start lists is imported.') + '</div>'; return; }
   main.innerHTML = b + top + legend + (mode === 'heat' ? heatCard(d, list, canFlag) : allHeats(d, canFlag));
@@ -4327,11 +4500,11 @@ function allHeats(d, canFlag){
     out += '<section class="ci-ev' + (isOpen ? ' open' : '') + '"><button class="ci-evh" data-utog="' + e.id + '" aria-expanded="' + isOpen + '"><span class="chev" aria-hidden="true">▶</span>' +
       '<span class="ci-num">' + (e.num != null ? 'EVENT ' + esc(e.num) : '') + '<br><b class="num" style="color:var(--ink)">' + fmt(e.start) + '</b></span>' +
       '<span class="ci-name">' + esc(evTitle(e)) + '<small>' + [e.entries.length ? e.entries.length + (e.entries.length === 1 ? ' heat' : ' heats') : '<span style="color:var(--clay)">No athletes entered</span>', eventLayout(e) ? layoutName(eventLayout(e)) : ''].filter(Boolean).join(' · ') + '</small></span>' +
-      '<span class="ci-cnt">' + (finalOf(e.id) ? '<span class="upill s-final">Final</span>' : '') + (pend ? '<span class="upill s-ref">' + pend + ' pending</span>' : '') + (dq ? '<span class="upill s-dq">' + dq + ' DQ</span>' : '') + (pr ? '<span class="upill s-protest">Protest</span>' : '') + (clerkOn() ? '<span class="ci-pill in">' + cc.in + '/' + cc.n + ' in</span>' : '') + '</span></button>';
+      '<span class="ci-cnt">' + (finalOf(e.id) ? '<span class="upill s-final">Final</span>' : '') + (pend ? '<span class="upill s-ref">' + pend + ' pending</span>' : '') + (dq ? '<span class="upill s-dq">' + dq + ' DQ</span>' : '') + (pr ? '<span class="upill s-protest">Protest</span>' : '') + (ciTracked(e) ? '<span class="ci-pill in">' + cc.in + '/' + cc.n + ' in</span>' : '') + '</span></button>';
     if (isOpen && !e.entries.length) out += emptyHeatNote(e, 'ump');
     else if (isOpen) secs.forEach(function(s){
       var n = clearsFor(e.id, s.num).length, orig = e.entries.filter(function(x){ return x.num === s.num; })[0] || s;
-      out += '<div class="ci-sec"><span>' + esc(secName(s)) + (s.label ? ' · ' + esc(s.label) : '') + (n ? ' <span class="ok-count">✓ ' + n + ' done</span>' : '') + '</span><span class="ci-cnt" style="text-transform:none;letter-spacing:0">' + (clerkOn() ? (slStaged(d, e, orig) ? '<span class="ci-pill staged">Staged</span>' : '') + ciPills(ciCounts(d, e, orig)) : '') + '</span></div><div style="overflow-x:auto"><table class="lanes"><tbody>' + laneRows(d, e, orig, s.lanes, canFlag) + '</tbody></table></div>';
+      out += '<div class="ci-sec"><span>' + esc(secName(s)) + (s.label ? ' · ' + esc(s.label) : '') + (n ? ' <span class="ok-count">✓ ' + n + ' done</span>' : '') + '</span><span class="ci-cnt" style="text-transform:none;letter-spacing:0">' + (ciTracked(e) ? (slStaged(d, e, orig) ? '<span class="ci-pill staged">Staged</span>' : '') + ciPills(ciCounts(d, e, orig)) : '') + '</span></div><div style="overflow-x:auto"><table class="lanes"><tbody>' + laneRows(d, e, orig, s.lanes, canFlag) + '</tbody></table></div>';
     });
     out += '</section>';
   });
@@ -4359,7 +4532,7 @@ function openReport(evId, sn, lane){
   if (!l) return;
   var st = ciState(d, e, l), name = evTitle(e);
   openSheet('<div class="sh-top"><div><div class="muted mono-cap">' + (e.num != null ? 'EVENT ' + esc(e.num) + ' · ' : '') + esc(secName(s)).toUpperCase() + '</div><h2>Report foul · Lane ' + esc(l.lane) + '</h2></div><button class="x" data-close aria-label="Close">×</button></div>' +
-    '<dl class="kv">' + (isRelayLane(l) ? '<dt>Relay team</dt><dd>' + esc(relayName(l)) + '</dd>' : '<dt>Athlete</dt><dd>' + esc(l.name || l.team) + (l.bib ? ' · #' + esc(l.bib) : '') + '</dd><dt>Team</dt><dd>' + esc(l.team || '—') + '</dd>') + '<dt>Event</dt><dd>' + esc(name) + '</dd>' + (clerkOn() ? '<dt>Clerking</dt><dd>' + (st === 'in' ? 'Checked in' : 'Not checked in — confirm the lane before submitting') + '</dd>' : '') + '</dl>' +
+    '<dl class="kv">' + (isRelayLane(l) ? '<dt>Relay team</dt><dd>' + esc(relayName(l)) + '</dd>' : '<dt>Athlete</dt><dd>' + esc(l.name || l.team) + (l.bib ? ' · #' + esc(l.bib) : '') + '</dd><dt>Team</dt><dd>' + esc(l.team || '—') + '</dd>') + '<dt>Event</dt><dd>' + esc(name) + '</dd>' + (ciTracked(e) ? '<dt>' + (ceManaged(e) ? 'Check-in' : 'Clerking') + '</dt><dd>' + (st === 'in' ? 'Checked in' : 'Not checked in — confirm the lane before submitting') + '</dd>' : '') + '</dl>' +
     '<form id="rform" class="box" style="background:transparent;padding:0">' + runnerPick(l) +
     '<label class="lbl" for="r-rule">Rule</label><select class="f" id="r-rule" required>' + rules().map(function(r){ var ref = refFor(r, name); return '<option value="' + esc(r.id) + '">' + esc((ref ? ref + ' · ' : '') + r.title) + '</option>'; }).join('') + '</select>' +
     '<span class="hint">' + (S.book ? esc(bookName(S.book)) + ' rulebook' : 'The referee hasn\'t chosen a rulebook yet; rule numbers are added once they do.') + '</span>' +
@@ -4411,7 +4584,7 @@ function openDetail(id){
     else if (r === 'referee' && c.status === 'reported') act = '<p class="muted" style="margin:0">Waiting for the chief umpire to review.</p>';
   }
   var f = findEv(c.evId), clerk = '';
-  if (f){ var s = f.e.entries.filter(function(x){ return x.num === c.sectionNum; })[0], l = s && s.lanes.filter(function(x){ return String(x.lane) === String(c.lane); })[0]; if (l) clerk = '<dt>' + (clerkOn() ? 'Clerking' : 'Status') + '</dt><dd>' + stChip(athState(f.d, f.e, s, l)) + '</dd>'; }
+  if (f){ var s = f.e.entries.filter(function(x){ return x.num === c.sectionNum; })[0], l = s && s.lanes.filter(function(x){ return String(x.lane) === String(c.lane); })[0]; if (l) clerk = '<dt>' + (ciTracked(f.e) ? (ceManaged(f.e) ? 'Check-in' : 'Clerking') : 'Status') + '</dt><dd>' + stChip(athState(f.d, f.e, s, l)) + '</dd>'; }
   var H = (c.history || []).map(function(h){ return '<li><b>' + esc(h.action) + '</b> — ' + esc(nameOf(h.by)) + (h.role ? ' (' + esc(ROLE_NAMES[h.role] || h.role) + ')' : '') + ' <span class="when">' + tm(h.at) + '</span>' + (h.note ? '<div class="note">' + esc(h.note) + '</div>' : '') + '</li>'; }).join('');
   openSheet('<div class="sh-top"><div><div class="muted mono-cap">' + esc(evLabel(c)).toUpperCase() + ' · ' + esc(c.sectionLabel || '').toUpperCase() + ' · LANE ' + esc(c.lane) + '</div><h2>' + esc(c.athlete) + '</h2>' + (c.runner ? '<div class="runner-tag">' + (c.leg ? 'Leg ' + c.leg + ' · ' : '') + esc(c.runner) + '</div>' : '') + '</div><button class="x" data-close aria-label="Close">×</button></div>' +
     '<div>' + upill(c) + '</div>' +
@@ -4515,7 +4688,7 @@ function renderTiming(){
     var st = evState(e), calls = evCalls(e.id).sort(function(a, b){ return a.sectionNum - b.sectionNum || +a.lane - +b.lane; }), fin = S.finals[e.id], pend = evPending(e.id), dqs = calls.filter(function(c){ return c.status === 'dq'; });
     var cc = ciCounts(d, e), stg = e.entries.filter(function(s){ return slStaged(d, e, s); }).length;
     var chip = { final:'<span class="upill s-final">Final</span>', changed:'<span class="upill s-dq">Changed after final</span>', pending:'<span class="upill s-ref">' + pend.length + ' in progress</span>', ready:'<span class="upill s-reported">Ready to finalize</span>', open:'<span class="upill s-closed">No calls</span>' }[st];
-    out += '<section class="tevent st-' + st + '"><div class="tev-h"><span class="ci-num">' + (e.num != null ? 'EVENT ' + esc(e.num) : '') + '<br><b class="num" style="color:var(--ink)">' + fmt(e.start) + '</b></span><span class="ci-name grow">' + esc(evTitle(e)) + '<small>' + (clerkOn() ? cc.in + ' checked in · ' + cc.scr + ' scratched · ' + stg + '/' + e.entries.length + ' heats staged' : cc.n + ' entered · ' + e.entries.length + (e.entries.length === 1 ? ' heat' : ' heats')) + '</small></span>' + chip + '</div>';
+    out += '<section class="tevent st-' + st + '"><div class="tev-h"><span class="ci-num">' + (e.num != null ? 'EVENT ' + esc(e.num) : '') + '<br><b class="num" style="color:var(--ink)">' + fmt(e.start) + '</b></span><span class="ci-name grow">' + esc(evTitle(e)) + '<small>' + (ciTracked(e) ? cc.in + ' checked in · ' + cc.scr + ' scratched · ' + stg + '/' + e.entries.length + ' heats staged' : cc.n + ' entered · ' + e.entries.length + (e.entries.length === 1 ? ' heat' : ' heats')) + '</small></span>' + chip + '</div>';
     if (calls.length) out += '<div class="tcalls">' + calls.map(function(c){ return '<button class="tcall" data-uopen="' + c.id + '"><span class="lane">' + esc(c.lane) + '</span><span class="tc-body"><span class="tc-t">' + esc(c.athlete + runnerTxt(c)) + ' <span class="muted">· ' + esc(c.sectionLabel) + '</span></span><span class="tc-r">' + esc(ruleLabel(c)) + '</span>' + pipe(c) + '</span></button>'; }).join('') + '</div>';
     else { var n = S.clears.filter(function(c){ return c.evId === e.id; }).length; out += '<p class="tnone">No violations reported' + (n ? ' · ' + n + ' umpire OK' + (n > 1 ? 's' : '') + ' logged' : '') + '.</p>'; }
     var ch = changedAfterFinal(e.id);
