@@ -3381,7 +3381,7 @@ function renderAccess(main){
     '<span class="qr-act"><button class="btn sm" data-qrbig="' + a.pos + '">Show large</button><button class="btn sm" data-qrcopy="' + a.pos + '">Copy link</button></span></div></div>'; };
   var sec = function(t, g){ var x = list.filter(function(a){ return a.group === g; }); return x.length ? '<h2 class="section-title">' + t + '</h2><div class="qr-grid">' + x.map(card).join('') + '</div>' : ''; };
   main.innerHTML = '<div class="card pad"><h2>Access codes · ' + esc(M.name) + '</h2><p class="hint" style="margin-top:0;font-size:14px">Each official scans their code with their phone\'s camera. The app opens on that device with this meet and their role already set: clerks land on Live Calls or the Start Line, umpires on their heats with their posts, the chief, referee and timing on their queues. The code sets up the device; each person still needs to be signed in with access to this app.</p>' + (lib ? '' : '<p class="err">The QR code library didn\'t load. Use Copy link to send each official their link.</p>') + '</div>' +
-    sec('Meet', 'meet') + sec('Clerking', 'clerk') + sec('Umpiring officials', 'ump') + sec('Umpires', 'umps');
+    sec('Meet', 'meet') + sec('Clerking', 'clerk') + sec('Lead officials', 'ump') + sec('Umpires', 'umps');
 }
 function showQrBig(pos){
   var a = accessList().filter(function(x){ return x.pos === pos; })[0]; if (!a) return;
