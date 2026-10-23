@@ -583,7 +583,7 @@ body:not([data-group="clerk"]) #btnSound,body:not([data-group="clerk"]) #btnVoic
 .stepper button:disabled{opacity:.35;cursor:default}
 .stepper input{width:54px;border:0;border-left:1px solid var(--line);border-right:1px solid var(--line);text-align:center;font-family:var(--display);font-weight:700;font-size:20px;background:var(--surface);padding:5px 0;-moz-appearance:textfield}
 .roster{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:10px;overflow:hidden}
-.ump-row{display:grid;grid-template-columns:34px minmax(0,1.2fr) repeat(3,minmax(0,1fr));gap:8px;align-items:end;padding:10px 12px;border-top:1px solid var(--line)}
+.ump-row{display:grid;grid-template-columns:34px minmax(0,1.2fr) repeat(4,minmax(0,1fr));gap:8px;align-items:end;padding:10px 12px;border-top:1px solid var(--line)}
 .ump-row:first-child{border-top:0}
 .ump-row .lane{margin-bottom:3px}
 .pos{display:flex;flex-direction:column;gap:2px;min-width:0}
@@ -830,6 +830,20 @@ nav.tabs{justify-content:safe center}
 
 .warn-list{margin:4px 0 0;padding-left:20px;line-height:1.5}
 .warn-list b{font-variant-numeric:tabular-nums}
+
+/* ---------- relay exchange zones ---------- */
+.relaybox{margin-top:12px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--surface-2)}
+.relaytbl{width:100%;border-collapse:collapse;margin-top:6px;font-size:14px}
+.relaytbl th,.relaytbl td{text-align:left;padding:6px 8px;border-top:1px solid var(--line);vertical-align:top}
+.relaytbl tr:first-child th,.relaytbl tr:first-child td{border-top:0}
+.relaytbl th{white-space:nowrap;font-family:var(--display);font-size:16px;width:1%}
+.relaytbl th small{display:block;font-family:inherit;font-size:11px;font-weight:700;color:var(--teal);letter-spacing:.3px;text-transform:uppercase}
+.relaytbl td.num{white-space:nowrap;width:1%}
+.relaytbl tr.inmeet th{color:var(--ink)}
+@media (max-width:640px){ .relaytbl,.relaytbl tbody,.relaytbl tr{display:block} .relaytbl tr{padding:6px 0;border-top:1px solid var(--line)} .relaytbl tr:first-child{border-top:0} .relaytbl th,.relaytbl td{display:inline-block;border:0;padding:2px 6px 2px 0;width:auto} .relaytbl td:last-child{display:block} }
+.xzones{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:baseline;margin-top:8px;font-size:14px}
+.xzones .cl-h{font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--muted)}
+@media (min-width:641px) and (max-width:1000px){ .ump-row{grid-template-columns:34px minmax(0,1fr) minmax(0,1fr)} .ump-row .u-name{grid-column:2/-1} .ump-row .pos:nth-of-type(odd){grid-column:2} }
 
 </style>
 <script>
@@ -4022,12 +4036,60 @@ var STATUS = {
  dq:{label:"Disqualified",cls:"s-dq"},
  no_dq:{label:"Not disqualified",cls:"s-ok"}
 };
-var LAYOUTS = [{id:"oval",name:"Oval"},{id:"half",name:"Half lap"},{id:"straight",name:"Straight"}];
+var LAYOUTS = [{id:"oval",name:"Oval"},{id:"half",name:"Half lap"},{id:"straight",name:"Straight"},{id:"relay",name:"Relays"}];
 var DEFAULT_POS = {
  oval:["Start","Turn 1 – entry","Turn 1 – apex","Turn 1 – exit","Break line","Backstretch","Turn 2 – entry","Turn 2 – apex","Turn 2 – exit","Homestretch","Exchange zone 1","Exchange zone 2","Exchange zone 3","Finish"],
  half:["Start – stagger","Turn – entry","Turn – apex","Turn – exit","Homestretch","Finish"],
  straight:["Start – lanes 1–4","Start – lanes 5–8","Hurdles 1–2","Hurdles 3–4","Last hurdle","Mid-straight","Finish"]
 };
+/* ---------- relays and exchange zones ----------
+   Every relay finishes at the finish line, so an exchange happens (race distance − distance run so far)
+   before the finish, folded onto the lap. On a 200m oval every common relay hands off in the one zone at
+   the finish line; on a 400m oval the 4x100 uses three zones around the track and the 4x400 uses the finish-line zone. */
+var RELAY_COMMON = {
+  200:['4x200', '4x400', '4x800', 'DMR', 'SMR 1600'],
+  300:['4x200', '4x400', '4x800', 'DMR'],
+  400:['4x100', '4x200', '4x400', '4x800', 'DMR', 'SMR 800', 'SMR 1600']
+};
+function relayLegs(name){
+  var n = String(name || ''), m;
+  if (/shuttle/i.test(n)) return null;
+  if (/\bDMR\b|distance\s*medley/i.test(n)) return { label:'DMR', legs:[1200, 400, 800, 1600] };
+  if (/\bSMR\b|sprint\s*medley/i.test(n)){ var small = /\b800\b/.test(n) && !/\b1600\b/.test(n); return small ? { label:'SMR 800', legs:[100, 100, 200, 400] } : { label:'SMR 1600', legs:[200, 200, 400, 800] }; }
+  if ((m = n.match(/(\d)\s*x\s*(\d{2,4})/i))) return { label:m[1] + 'x' + m[2], legs:Array(+m[1]).fill(+m[2]) };
+  if ((m = n.match(/(\d)\s*x\s*(1\s*)?mile/i))) return { label:m[1] + 'xMile', legs:Array(+m[1]).fill(1609) };
+  return null;
+}
+/* Metres before the finish line, folded onto the lap: 0 is the finish-line zone. */
+function zoneName(m, lap){
+  if (!m) return 'Finish-line zone';
+  if (lap === 400) return ({ 300:'Zone 1 (back straight)', 200:'Zone 2 (200m mark)', 100:'Zone 3 (home straight)' })[m] || m + 'm-to-go zone';
+  return m + 'm-to-go zone';
+}
+function relayZones(legs, lap){
+  var total = legs.reduce(function(a, b){ return a + b; }, 0), run = 0, out = [];
+  for (var k = 0; k < legs.length - 1; k++){ run += legs[k]; var m = Math.round(((total - run) % lap + lap) % lap); if (m <= 15 || lap - m <= 15) m = 0; out.push({ n:k + 1, m:m, name:zoneName(m, lap) }); }
+  return out;
+}
+/* "1st Back-straight zone · 2nd 200m zone · 3rd Home-straight zone", or "All 3 in the Finish-line zone". */
+function zonesText(z){
+  if (!z.length) return '';
+  var uniq = z.map(function(x){ return x.name; }).filter(function(v, i, a){ return a.indexOf(v) === i; });
+  if (uniq.length === 1) return (z.length === 1 ? 'The exchange is' : 'All ' + z.length + ' exchanges') + ' in the ' + uniq[0];
+  return z.map(function(x){ return ['1st', '2nd', '3rd', '4th', '5th'][x.n - 1] + ': ' + x.name; }).join(' · ');
+}
+function relayZoneList(lap){
+  var key = RELAY_COMMON[lap] ? lap : 400, seen = {}, out = [];
+  RELAY_COMMON[key].forEach(function(r){ relayZones(relayLegs(r).legs, lap).forEach(function(z){ if (!seen[z.name]){ seen[z.name] = 1; out.push(z); } }); });
+  return out.sort(function(a, b){ return b.m - a.m; });
+}
+/* Default relay posts: the start, the break line, each zone's entry and exit in running order, the turns and the finish. */
+function relayPositions(lap){
+  var z = relayZoneList(lap), out = ['Start', 'Break line'];
+  z.forEach(function(x){ out.push(x.name.replace(/ zone/, ' zone') + ' – entry', x.name + ' – exit'); });
+  return out.concat(['Turn 1', 'Turn 2', 'Finish']);
+}
+function posList(d, lay){ return lay === 'relay' && !(d.positions.relay && d.positions.relay.length) ? relayPositions(lapLen(d)) : (d.positions[lay] || []); }
 var FACILITIES = [{id:"indoor",name:"Indoor",sub:"200m oval",lap:200},{id:"indoor300",name:"Indoor",sub:"300m oval",lap:300},{id:"outdoor",name:"Outdoor",sub:"400m oval",lap:400},{id:"other",name:"Other",sub:"Enter lap distance"}];
 var FIELD_RE = /\b(High|Long|Triple|Pole|Shot|Discus|Hammer|Javelin|Weight|Jump|Vault|Throw|Put|HJ|LJ|TJ|PV|SP|DT|HT|JT)\b/i;
 var ROLE_NAMES = { umpire:"Umpire", chief:"Chief Umpire", assistant:"Chief's Assistant", referee:"Referee", timing:"Timing" };
@@ -4131,14 +4193,14 @@ function upill(c){
 }
 
 /* ---------- officials & posts ---------- */
-function offDefaults(){ return { facility:null, umpireCount:6, referee:'', chief:'', assistant:'', useAssistant:false, timing:'', umpires:{}, positions:JSON.parse(JSON.stringify(DEFAULT_POS)), assign:{ oval:{}, half:{}, straight:{} }, overrides:{} }; }
-function offData(){ var d = Object.assign(offDefaults(), S.off || {}); d.positions = Object.assign(JSON.parse(JSON.stringify(DEFAULT_POS)), d.positions || {}); d.assign = Object.assign({ oval:{}, half:{}, straight:{} }, d.assign || {}); d.umpires = d.umpires || {}; d.overrides = d.overrides || {}; return d; }
+function offDefaults(){ return { facility:null, umpireCount:6, referee:'', chief:'', assistant:'', useAssistant:false, timing:'', umpires:{}, positions:JSON.parse(JSON.stringify(DEFAULT_POS)), assign:{ oval:{}, half:{}, straight:{}, relay:{} }, overrides:{} }; }
+function offData(){ var d = Object.assign(offDefaults(), S.off || {}); d.positions = Object.assign(JSON.parse(JSON.stringify(DEFAULT_POS)), d.positions || {}); d.assign = Object.assign({ oval:{}, half:{}, straight:{}, relay:{} }, d.assign || {}); d.umpires = d.umpires || {}; d.overrides = d.overrides || {}; return d; }
 function guessFacility(){ var n = M ? M.days.map(function(d){ return d.events.map(lname).join(' '); }).join(' ') : ''; if (/\b(50|55|60)\s*(Meter|m|Yard|y)(H|\b)/i.test(n)) return 'indoor'; if (/\b(100|110)\s*(Meter|m)(H|\b)|\b(400|300)\s*(Meter|m)\s*(H|Hurdle)|Steeple|\dmSC/i.test(n)) return 'outdoor'; return null; }
 function lapLen(d){ var f = d.facility || guessFacility() || 'outdoor'; if (f === 'other'){ var v = +d.lapLength; return v >= 100 && v <= 1000 ? v : 400; } return (FACILITIES.filter(function(x){ return x.id === f; })[0] || {}).lap || 400; }
 function autoLayout(name, lap){
   var n = String(name || '');
   if (FIELD_RE.test(n)) return null;
-  if (/relay|\d\s*x\s*\d|\bDMR\b|\bSMR\b/i.test(n)) return /shuttle/i.test(n) ? 'straight' : 'oval';
+  if (/relay|\d\s*x\s*\d|\bDMR\b|\bSMR\b|medley/i.test(n)) return /shuttle/i.test(n) ? 'straight' : 'relay';
   var m = n.match(/(\d{2,5})\s*(?:meters?|metres?|m|yards?|yd|y)(?![a-z]{2})/i);
   if (!m){ return /mile/i.test(n) ? 'oval' : null; }
   var dist = +m[1];
@@ -4147,7 +4209,7 @@ function autoLayout(name, lap){
   if (dist <= lap / 2) return 'half';
   return 'oval';
 }
-function layDesc(id, L){ if (id === 'oval') return 'Lap races: ' + L + 'm and up' + (L > 200 ? ', plus partial laps over ' + (L / 2) + 'm' : ''); if (id === 'half') return 'Up to half a lap (' + (L / 2) + 'm)'; return '50 / 55 / 60 / 100m dashes and 100H / 110H hurdles'; }
+function layDesc(id, L){ if (id === 'relay'){ var z = relayZoneList(L); return 'Relays: ' + (z.length === 1 ? 'one exchange zone, at the finish line' : L === 400 ? 'zones 1–3 around the track (4x100) and the finish-line zone' : z.length + ' exchange zones') + '. Shuttle hurdles use Straight'; } if (id === 'oval') return 'Lap races: ' + L + 'm and up' + (L > 200 ? ', plus partial laps over ' + (L / 2) + 'm' : ''); if (id === 'half') return 'Up to half a lap (' + (L / 2) + 'm)'; return '50 / 55 / 60 / 100m dashes and 100H / 110H hurdles'; }
 function layoutName(id){ return (LAYOUTS.filter(function(l){ return l.id === id; })[0] || {}).name || ''; }
 function eventLayout(e, dd){ var d = dd || offData(), o = d.overrides[e.id]; if (o) return o === 'none' ? null : o; return autoLayout(lname(e), lapLen(d)); }
 function isUmpired(e){ var o = offData().overrides[e.id]; if (o === 'none') return false; if (o) return true; return !FIELD_RE.test(lname(e)); }
@@ -4227,7 +4289,7 @@ function heatCard(d, list, canFlag){
     '<section class="ci-heat"><div class="ci-hh"><div class="muted" style="font-size:12px;font-weight:800;letter-spacing:.5px">' + (e.num != null ? 'EVENT ' + esc(e.num) + ' · ' : '') + esc(secName(s)).toUpperCase() + (lay ? ' · ' + layoutName(lay).toUpperCase() : '') + '</div>' +
       '<h2>' + esc(evTitle(e)) + '</h2>' + (e.note ? '<div class="muted" style="font-style:italic;font-size:14px">' + esc(e.note) + '</div>' : '') +
       '<div class="meta"><span>Starts <b class="num">' + fmt(e.start) + '</b></span>' + (s.label ? '<span>' + esc(s.label) + '</span>' : '') + (e.line ? '<span>Line <b>' + esc(e.line) + '</b></span>' : '') + (done ? '<span class="ok-count">✓ ' + done + (done === 1 ? ' umpire' : ' umpires') + ' done</span>' : '') + (fin ? '<span class="upill s-final">Final</span>' : '') + '</div>' +
-      clerkLine(d, e, s) + '</div>' +
+      clerkLine(d, e, s) + exchLine(e) + '</div>' +
       (s.lanes.length ? '<div style="overflow-x:auto"><table class="lanes heat-lanes"><tbody>' + laneRows(d, e, s, s.lanes, canFlag) + '</tbody></table></div>' : emptyHeatNote(e, 'ump')) + st + '</section>' +
     (canFlag && s.lanes.length ? '<div class="ci-bar"><button class="btn" data-unav="-1"' + (i === 0 ? ' disabled' : '') + ' aria-label="Previous heat">‹ Prev</button>' +
       (mine.length ? '<button class="btn primary heat-go" data-uheatok>Done – next heat ›</button>' : '<button class="btn good heat-go" data-uheatok>✓ OK – no violations</button>') +
@@ -4468,12 +4530,25 @@ function unFinal(id){ db.doc(P('finals/' + safeId(id))).delete().then(function()
 
 /* ---------- setup cards (umpiring) ---------- */
 function curOff(){ if (!S.offDraft) S.offDraft = JSON.parse(JSON.stringify(offData())); return S.offDraft; }
+function exchLine(e){
+  if (eventLayout(e) !== 'relay') return '';
+  var r = relayLegs(lname(e)); if (!r) return '';
+  return '<div class="xzones"><span class="cl-h">Exchanges</span>' + esc(zonesText(relayZones(r.legs, lapLen(offData())))) + '</div>';
+}
+function relayCard(d){
+  var lap = lapLen(d), key = RELAY_COMMON[lap] ? lap : 400, names = RELAY_COMMON[key].slice(), mine = {};
+  M.days.forEach(function(x){ x.events.forEach(function(e){ var r = relayLegs(lname(e)); if (r && eventLayout(e, d) === 'relay'){ mine[r.label] = 1; if (names.indexOf(r.label) < 0) names.push(r.label); } }); });
+  var z = relayZoneList(lap);
+  return '<div class="relaybox"><div class="row" style="gap:8px;align-items:baseline"><b>Relay exchange zones</b><span class="muted" style="font-size:13px">' + lap + 'm oval · ' + (z.length === 1 ? '1 zone' : z.length + ' zones') + ': ' + z.map(function(x){ return esc(x.name); }).join(', ') + '</span></div>' +
+    '<table class="relaytbl"><tbody>' + names.map(function(r){ var L = relayLegs(r); return '<tr' + (mine[r] ? ' class="inmeet"' : '') + '><th>' + esc(r) + (mine[r] ? '<small>In this meet</small>' : '') + '</th><td class="num muted">' + L.legs.join('–') + '</td><td>' + esc(zonesText(relayZones(L.legs, lap))) + '</td></tr>'; }).join('') + '</tbody></table>' +
+    '<p class="hint" style="margin:6px 0 0">Relay posts below are set up for these zones. Post umpires at each zone your relays use; edit the list under <b>Edit position lists</b>.</p></div>';
+}
 function officialsCard(){
   var d = curOff(), ed = cw(), dis = ed ? '' : ' disabled', fac = d.facility || guessFacility(), N = Math.max(1, Math.min(40, d.umpireCount || 1));
   var evs = []; M.days.forEach(function(x){ ciEvents(x).forEach(function(e){ evs.push({ d:x, e:e }); }); });
-  var byLay = { oval:[], half:[], straight:[] }; evs.forEach(function(x){ var l = eventLayout(x.e, d); if (l && byLay[l]) byLay[l].push(evTitle(x.e)); });
+  var byLay = { oval:[], half:[], straight:[], relay:[] }; evs.forEach(function(x){ var l = eventLayout(x.e, d); if (l && byLay[l]) byLay[l].push(evTitle(x.e)); });
   var dup = {}; LAYOUTS.forEach(function(L){ var seen = {}; for (var i = 1; i <= N; i++){ var p = (d.assign[L.id] || {})['u' + i]; if (p) (seen[p] = seen[p] || []).push(i); } dup[L.id] = seen; });
-  var opts = function(lay, val){ return '<option value="">— Not posted —</option>' + (d.positions[lay] || []).map(function(p){ return '<option' + (p === val ? ' selected' : '') + '>' + esc(p) + '</option>'; }).join('') + (val && (d.positions[lay] || []).indexOf(val) < 0 ? '<option selected>' + esc(val) + '</option>' : ''); };
+  var opts = function(lay, val){ return '<option value="">— Not posted —</option>' + posList(d, lay).map(function(p){ return '<option' + (p === val ? ' selected' : '') + '>' + esc(p) + '</option>'; }).join('') + (val && posList(d, lay).indexOf(val) < 0 ? '<option selected>' + esc(val) + '</option>' : ''); };
   var rows = '';
   for (var i = 1; i <= N; i++){
     var id = 'u' + i, nm = (d.umpires[id] || {}).name || '';
@@ -4487,9 +4562,10 @@ function officialsCard(){
     '<div class="row2" style="margin-top:12px"><div><label class="lbl" for="o-ref">Referee</label><input class="f" id="o-ref" value="' + esc(d.referee) + '" placeholder="Name"' + dis + '></div><div><label class="lbl" for="o-chief">Chief Umpire</label><input class="f" id="o-chief" value="' + esc(d.chief) + '" placeholder="Name"' + dis + '></div><div><label class="lbl" for="o-timing">Timing</label><input class="f" id="o-timing" value="' + esc(d.timing || '') + '" placeholder="Name"' + dis + '></div>' +
     '<div><label class="row" style="gap:6px;margin:16px 0 4px"><input type="checkbox" id="o-useasst"' + (d.useAssistant ? ' checked' : '') + dis + '> Use a Chief\'s Assistant</label>' + (d.useAssistant ? '<input class="f" id="o-asst" aria-label="Chief\'s Assistant name" value="' + esc(d.assistant || '') + '" placeholder="Name"' + dis + '>' : '') + '</div></div>' +
     '<div class="layouts">' + LAYOUTS.map(function(L){ return '<div class="lay"><b>' + L.name + '</b><span>' + layDesc(L.id, lapLen(d)) + '</span><span class="muted" style="font-size:12px">' + (byLay[L.id].length ? byLay[L.id].length + ' events' : 'No events in this meet') + '</span></div>'; }).join('') + '</div>' +
+    relayCard(d) +
     '<div class="row" style="margin:12px 0 8px"><b>Umpires</b><div class="stepper"><button data-ustep="-1" aria-label="Fewer umpires"' + (dis || N <= 1 ? ' disabled' : '') + '>−</button><input id="o-count" type="number" min="1" max="40" value="' + N + '" aria-label="Number of umpires"' + dis + '><button data-ustep="1" aria-label="More umpires"' + (dis || N >= 40 ? ' disabled' : '') + '>+</button></div></div>' +
     '<div class="roster">' + rows + '</div>' +
-    (ed ? '<details class="more" id="detPos"><summary>Edit position lists</summary><p class="hint">One position per line.</p><div class="row2">' + LAYOUTS.map(function(L){ return '<div><label class="lbl" for="pl-' + L.id + '">' + L.name + '</label><textarea class="f" id="pl-' + L.id + '" data-uposlist="' + L.id + '" rows="8">' + esc((d.positions[L.id] || []).join('\n')) + '</textarea></div>'; }).join('') + '</div></details>' +
+    (ed ? '<details class="more" id="detPos"><summary>Edit position lists</summary><p class="hint">One position per line.</p><div class="row2">' + LAYOUTS.map(function(L){ return '<div><label class="lbl" for="pl-' + L.id + '">' + L.name + '</label><textarea class="f" id="pl-' + L.id + '" data-uposlist="' + L.id + '" rows="8">' + esc(posList(d, L.id).join('\n')) + '</textarea></div>'; }).join('') + '</div></details>' +
       '<details class="more" id="detLay"><summary>Event layouts (' + evs.length + ' events)</summary><p class="hint">Each event is sorted from its distance and the facility. Change any run differently, or set field events and others to no umpires.</p><div class="preview"><table><tbody>' + evs.map(function(x){ var e = x.e, o = d.overrides[e.id] || '', auto = autoLayout(lname(e), lapLen(d)); return '<tr><td class="muted">' + esc(x.d.name) + '</td><td>' + esc(evTitle(e)) + '</td><td><select class="f" data-uovr="' + e.id + '" aria-label="Layout for ' + esc(evTitle(e)) + '"><option value=""' + (!o ? ' selected' : '') + '>Auto (' + (FIELD_RE.test(lname(e)) ? 'no umpires' : auto ? layoutName(auto) : 'no post') + ')</option>' + LAYOUTS.map(function(L){ return '<option value="' + L.id + '"' + (o === L.id ? ' selected' : '') + '>' + L.name + '</option>'; }).join('') + '<option value="none"' + (o === 'none' ? ' selected' : '') + '>No umpires</option></select></td></tr>'; }).join('') + '</tbody></table></div></details>' +
       '<div class="row" style="margin-top:12px"><button class="btn primary" id="saveOff"' + (S.offDirty ? '' : ' disabled') + '>Save umpiring officials</button>' + (S.offDirty ? '<span class="muted">Unsaved changes</span>' : '') + '</div>' : '') + '</div>';
 }
@@ -4502,6 +4578,8 @@ function collectOff(){
   $$('.ump-row', c).forEach(function(row){ var id = row.dataset.uu; d.umpires[id] = Object.assign(d.umpires[id] || {}, { name:$('.u-name', row).value.trim() });
     $$('select[data-ulay]', row).forEach(function(sel){ var L = sel.dataset.ulay; d.assign[L] = d.assign[L] || {}; if (sel.value) d.assign[L][id] = sel.value; else delete d.assign[L][id]; }); });
   $$('textarea[data-uposlist]', c).forEach(function(t){ var list = t.value.split('\n').map(function(x){ return x.trim(); }).filter(Boolean); if (list.length) d.positions[t.dataset.uposlist] = list; });
+  /* Relay posts follow the facility until someone changes the list. */
+  if (d.positions.relay && d.positions.relay.join('\n') === relayPositions(lapLen(d)).join('\n')) delete d.positions.relay;
   $$('select[data-uovr]', c).forEach(function(sel){ if (sel.value) d.overrides[sel.dataset.uovr] = sel.value; else delete d.overrides[sel.dataset.uovr]; });
 }
 function redrawOff(){ var c = $('#offCard'); if (!c) return; var open = $$('details', c).map(function(x){ return x.open; }); c.outerHTML = officialsCard(); $$('#offCard details').forEach(function(x, i){ if (open[i]) x.open = true; }); }
