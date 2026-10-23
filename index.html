@@ -3361,15 +3361,15 @@ function qrSvg(text){ try{ if (typeof qrcode !== 'function') return ''; var q = 
 function accessList(){
   var d = Ump.offData(), N = Math.max(1, Math.min(40, d.umpireCount || 1)), out = [];
   out.push({ pos:'director', title:'Meet Director', name:'', group:'meet', detail:ROLE_DEFS.director.hint });
+  out.push({ pos:'timing', title:'Timing', name:d.timing, group:'meet', detail:ROLE_DEFS.timing.hint });
   [['headClerk','hc'],['clerk','ck'],['lineClerk','lc'],['shoeCheck','sc']].forEach(function(r){
     var list = M.officials[r[0]] || [], any = false;
     list.forEach(function(nm, i){ if ((nm || '').trim()){ any = true; out.push({ pos:r[1] + (i + 1), title:ROLE_DEFS[r[0]].label, name:nm.trim(), group:'clerk', detail:ROLE_DEFS[r[0]].hint }); } });
     if (!any) out.push({ pos:r[1] + '1', title:ROLE_DEFS[r[0]].label, name:'', group:'clerk', detail:'Add names under Setup → Officials for a code per person' });
   });
+  out.push({ pos:'referee', title:'Referee', name:d.referee, group:'ump', detail:ROLE_DEFS.referee.hint });
   out.push({ pos:'chief', title:'Chief Umpire', name:d.chief, group:'ump', detail:ROLE_DEFS.chief.hint });
   if (d.useAssistant) out.push({ pos:'assistant', title:'Chief\'s Assistant', name:d.assistant, group:'ump', detail:ROLE_DEFS.assistant.hint });
-  out.push({ pos:'referee', title:'Referee', name:d.referee, group:'ump', detail:ROLE_DEFS.referee.hint });
-  out.push({ pos:'timing', title:'Timing', name:d.timing, group:'ump', detail:ROLE_DEFS.timing.hint });
   for (var i = 1; i <= N; i++){ var id = 'u' + i; out.push({ pos:id, title:'Umpire ' + i, name:(d.umpires[id] || {}).name, group:'umps', posts:Ump.LAYOUTS.map(function(L){ return { l:L.name, p:(d.assign[L.id] || {})[id] || '' }; }) }); }
   return out;
 }
