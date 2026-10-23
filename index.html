@@ -807,6 +807,27 @@ nav.tabs{justify-content:safe center}
   header.top .clock .s{font-size:10px}
 }
 
+/* ---------- entries: empty events, clerk entry editor, relay legs ---------- */
+.ent-empty{display:flex;flex-direction:column;align-items:flex-start;gap:6px;margin:12px 14px 14px;padding:14px 16px;border:1px dashed var(--line);border-radius:10px;background:var(--surface-2)}
+.ent-empty span{color:var(--muted);font-size:14px}
+.ent-empty .btn{margin-top:4px}
+.ci-heat .ent-empty{margin:12px 0 0}
+.ent-bar{display:flex;justify-content:flex-end;margin-top:8px}
+.ci-ev > .ent-bar{padding:0 14px 6px}
+.ent-ed h2{font-size:22px}
+.ent-heat{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px;background:var(--surface)}
+.ent-hh{gap:8px;margin-bottom:6px}
+.ent-row{display:grid;grid-template-columns:72px minmax(0,1fr) auto;gap:8px;align-items:end;padding:8px 0;border-top:1px solid var(--line)}
+.ent-row:first-of-type{border-top:0}
+.ent-row label{display:flex;flex-direction:column;gap:2px;min-width:0}
+.ent-row label>span{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}
+.ent-del{align-self:end;min-height:38px}
+.ent-legs{grid-column:1/-1;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+@media (max-width:640px){ .ent-legs{grid-template-columns:repeat(2,minmax(0,1fr))} .ent-row{grid-template-columns:58px minmax(0,1fr) auto} }
+.ent-foot{gap:8px;margin-top:6px;flex-wrap:wrap}
+.chips.runners small{display:block;font-size:10px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;opacity:.75}
+.runner-tag{display:inline-block;margin-top:4px;font-weight:700;font-size:14px;background:var(--flag,#F2B92B);color:#1b1300;border-radius:6px;padding:2px 8px}
+
 </style>
 <script>
 /* Firebase backend for the hosted copy (GitHub Pages). Inside Claude the platform supplies shared data,
@@ -1813,7 +1834,7 @@ function startListHtml(ev, open){
   return '<details class="sl"' + (open ? ' open' : '') + '><summary>Start list · ' + secs.length + (secs.length === 1 ? ' heat' : ' heats') + ' · ' + n + ' entries' + (c.in || c.scr ? ' · ' + c.in + ' checked in' + (c.scr ? ', ' + c.scr + ' scratched' : '') : '') + '</summary><table class="sltbl">' +
     secs.map(function(s){
       return '<tr class="sh"><td colspan="4">' + esc(s.kind + ' ' + s.num + (s.of ? ' of ' + s.of : '') + (s.label ? ' · ' + s.label : '')) + '</td></tr>' +
-        s.lanes.map(function(l){ var st = ciState(d, ev, l); return '<tr' + (st ? ' class="' + st + '"' : '') + '><td class="ln">' + esc(l.lane) + '</td><td class="num">' + esc(l.bib) + '</td><td>' + esc(l.name) + (ciLate(d, ev, l) ? '<span class="late-tag">LATE</span>' : '') + (l.members && l.members.length ? '<br><small>' + l.members.map(esc).join(' · ') + '</small>' : '') + '</td><td>' + esc(l.team !== l.name.replace(/\s+[A-D]$/, '') ? l.team : '') + (l.seed ? ' <small class="num">' + esc(l.seed) + '</small>' : '') + '</td></tr>'; }).join('');
+        s.lanes.map(function(l){ var st = ciState(d, ev, l); return '<tr' + (st ? ' class="' + st + '"' : '') + '><td class="ln">' + esc(l.lane) + '</td><td class="num">' + esc(l.bib) + '</td><td>' + esc(l.name) + (ciLate(d, ev, l) ? '<span class="late-tag">LATE</span>' : '') + (isRelayLane(l) ? '<br><small>' + esc(legsText(l)) + '</small>' : '') + '</td><td>' + esc(l.team !== l.name.replace(/\s+[A-D]$/, '') ? l.team : '') + (l.seed ? ' <small class="num">' + esc(l.seed) + '</small>' : '') + '</td></tr>'; }).join('');
     }).join('') + '</table></details>';
 }
 /* ---------- Athlete check-in ---------- */
@@ -1831,16 +1852,16 @@ function ciPills(c){
   if (!c.open) return '<span class="ci-pill done">✓ All ' + c.n + ' accounted for</span>' + (c.scr ? '<span class="ci-pill scr">' + c.scr + ' scr</span>' : '');
   return '<span class="ci-pill in">' + c.in + ' / ' + c.n + ' in</span>' + (c.scr ? '<span class="ci-pill scr">' + c.scr + ' scr</span>' : '') + '<span class="ci-pill">' + c.open + ' to go</span>';
 }
-function ciEvents(d){ return d.events.filter(function(e){ return e.entries && e.entries.length; }).sort(function(a, b){ return (a.start == null ? 1e9 : a.start) - (b.start == null ? 1e9 : b.start); }); }
-function ciHeats(d){ var out = []; ciEvents(d).forEach(function(e){ e.entries.forEach(function(s, i){ out.push({ e:e, s:s, key:e.id + '|' + i }); }); }); return out; }
+function ciEvents(d){ return d.events.filter(function(e){ if (!e.entries) e.entries = []; return true; }).sort(function(a, b){ return (a.start == null ? 1e9 : a.start) - (b.start == null ? 1e9 : b.start); }); }
+function ciHeats(d){ var out = []; ciEvents(d).forEach(function(e){ evSecs(e).forEach(function(s, i){ out.push({ e:e, s:s, key:e.id + '|' + i }); }); }); return out; }
 function secName(s){ return s.kind + ' ' + s.num + (s.of ? ' of ' + s.of : ''); }
 function ciRows(d, ev, lanes){
   return lanes.map(function(l){
     var st = ciState(d, ev, l), x = st ? d.checkin[ciKey(ev, l)] : null;
-    var relay = l.members && l.members.length;
+    var relay = isRelayLane(l);
     return '<button class="ci-row' + (st ? ' ' + st : '') + '" data-ci="' + esc(ciKey(ev, l)) + '" aria-label="' + esc((l.name || l.team) + ', lane ' + l.lane + ': ' + (st === 'in' ? 'checked in' : st === 'scr' ? 'scratched' : 'not checked in') + '. Tap to change.') + '">' +
       '<span class="ln">' + esc(l.lane) + '</span>' +
-      '<span class="who"><b>' + esc(l.name || l.team) + (x && x.late && st === 'in' ? '<span class="late-tag">LATE</span>' : '') + '</b><small>' + esc([l.bib ? '#' + l.bib : '', l.team && l.team !== String(l.name).replace(/\s+[A-D]$/, '') ? l.team : ''].filter(Boolean).join(' · ')) + (relay ? (l.bib || l.team !== String(l.name).replace(/\s+[A-D]$/, '') ? '<br>' : '') + esc(l.members.join(' · ')) : '') + '</small></span>' +
+      '<span class="who"><b>' + esc(l.name || l.team) + (x && x.late && st === 'in' ? '<span class="late-tag">LATE</span>' : '') + '</b><small>' + esc([l.bib ? '#' + l.bib : '', l.team && l.team !== String(l.name).replace(/\s+[A-D]$/, '') ? l.team : ''].filter(Boolean).join(' · ')) + (relay ? (l.bib || l.team !== String(l.name).replace(/\s+[A-D]$/, '') ? '<br>' : '') + esc(legsText(l)) : '') + '</small></span>' +
       '<span class="sd">' + esc(l.seed || '') + '</span>' +
       '<span class="st">' + (st === 'in' ? (x.late ? 'Late at start line<br>' : 'Checked in<br>') + fmt(x.at) : st === 'scr' ? 'Scratched' : 'Tap to check in') + '</span></button>';
   }).join('');
@@ -1849,7 +1870,7 @@ function renderCheckin(main){
   var d = activeDay();
   if (!d){ main.innerHTML = '<div class="card empty">No competition days yet.</div>'; return; }
   var evs = ciEvents(d);
-  if (!evs.length){ main.innerHTML = '<div class="card empty"><b>No start lists for ' + esc(d.name) + '.</b><br>Import the meet program (HY-TEK, AthleticNET or MeetPro) under <b>Setup → Import meet program</b> to load each heat\'s athletes and teams here.</div>'; return; }
+  if (!evs.length){ main.innerHTML = '<div class="card empty"><b>No events on ' + esc(d.name) + ' yet.</b><br>Add events on the Schedule, or import the meet program (HY-TEK, AthleticNET or MeetPro) under <b>Setup → Import meet program</b> to load each heat\'s athletes and teams here.</div>'; return; }
   var mode = UI.ciMode || 'heat';
   var top = '<div class="ci-top"><div class="seg" role="group" aria-label="Check-in view"><button data-civ="heat" aria-pressed="' + (mode === 'heat') + '">One heat</button><button data-civ="all" aria-pressed="' + (mode === 'all') + '">All events</button></div>' +
     (mode === 'all' ? '<input class="f" type="search" id="ciSearch" placeholder="Find event, athlete, team or bib" value="' + esc(UI.ciQ || '') + '" aria-label="Search check-in">' : '') + '</div>' +
@@ -1859,7 +1880,7 @@ function renderCheckin(main){
 function ciAllView(d){
   var q = (UI.ciQ || '').trim().toLowerCase(), open = UI.ciOpen || (UI.ciOpen = {}), out = '', shown = 0;
   ciEvents(d).forEach(function(e){
-    var secs = e.entries.map(function(s){ return { s:s, lanes:s.lanes }; });
+    var secs = evSecs(e).map(function(s){ return { s:s, lanes:s.lanes }; });
     var evHit = !q || (e.num + ' ' + evTitle(e)).toLowerCase().indexOf(q) >= 0;
     if (!evHit){
       secs = secs.map(function(x){ return { s:x.s, lanes:x.lanes.filter(function(l){ return [l.name, l.team, l.bib, (l.members || []).join(' ')].join(' ').toLowerCase().indexOf(q) >= 0; }) }; }).filter(function(x){ return x.lanes.length; });
@@ -1869,9 +1890,11 @@ function ciAllView(d){
     var isOpen = q ? true : !!open[e.id], c = ciCounts(d, e);
     out += '<section class="ci-ev' + (isOpen ? ' open' : '') + '"><button class="ci-evh" data-citog="' + e.id + '" aria-expanded="' + isOpen + '"><span class="chev" aria-hidden="true">▶</span>' +
       '<span class="ci-num">' + (e.num != null ? 'EVENT ' + esc(e.num) : '') + '<br><b class="num" style="color:var(--ink)">' + fmt(e.start) + '</b></span>' +
-      '<span class="ci-name">' + esc(evTitle(e)) + '<small>' + [e.entries.length + (e.entries.length === 1 ? ' heat' : ' heats'), e.round ? esc(e.round) : '', e.line ? 'Line ' + esc(e.line) : '', e.clerk ? 'Clerk: ' + esc(e.clerk) : ''].filter(Boolean).join(' · ') + '</small></span>' +
+      '<span class="ci-name">' + esc(evTitle(e)) + '<small>' + [e.entries.length ? e.entries.length + (e.entries.length === 1 ? ' heat' : ' heats') : '<span style="color:var(--clay)">No athletes entered</span>', e.round ? esc(e.round) : '', e.line ? 'Line ' + esc(e.line) : '', e.clerk ? 'Clerk: ' + esc(e.clerk) : ''].filter(Boolean).join(' · ') + '</small></span>' +
       '<span class="ci-cnt">' + ciPills(c) + '</span></button>';
-    if (isOpen) secs.forEach(function(x){
+    if (isOpen && !entCount(e)) out += emptyHeatNote(e);
+    else if (isOpen && canEditEntries()) out += '<div class="ent-bar">' + entButton(e) + '</div>';
+    if (isOpen && entCount(e)) secs.forEach(function(x){
       out += '<div class="ci-sec"><span>' + esc(secName(x.s)) + (x.s.label ? ' · ' + esc(x.s.label) : '') + '</span><span class="ci-cnt" style="text-transform:none;letter-spacing:0">' + (slStaged(d, e, x.s) ? '<span class="ci-pill staged">Staged</span>' : '') + ciPills(ciCounts(d, e, x.s)) + '</span></div><div class="ci-rows">' + ciRows(d, e, x.lanes) + '</div>';
     });
     out += '</section>';
@@ -1895,8 +1918,9 @@ function ciHeatView(d){
     '<div class="ci-prog" aria-hidden="true"><span style="width:' + Math.round((i + 1) / list.length * 100) + '%"></span></div>' +
     '<section class="ci-heat"><div class="ci-hh"><div class="muted" style="font-size:12px;font-weight:800;letter-spacing:.5px">' + (e.num != null ? 'EVENT ' + esc(e.num) + ' · ' : '') + esc(secName(s)).toUpperCase() + (s.label ? ' · ' + esc(s.label).toUpperCase() : '') + '</div>' +
       '<h2>' + esc(evTitle(e)) + '</h2>' + (e.note ? '<div class="muted" style="font-style:italic;font-size:14px">' + esc(e.note) + '</div>' : '') +
-      '<div class="meta"><span>Starts <b class="num">' + fmt(e.start) + '</b></span>' + (e.line ? '<span>Line <b>' + esc(e.line) + '</b></span>' : '') + (e.startType ? '<span>' + esc(e.startType) + '</span>' : '') + '<span>' + s.lanes.length + (s.lanes.length === 1 ? ' entry' : ' entries') + '</span>' + (e.clerk ? '<span>Clerk <b>' + esc(e.clerk) + '</b></span>' : '') + '</div></div>' +
-      '<div class="ci-rows">' + ciRows(d, e, s.lanes) + '</div>' + (slStaged(d, e, s) ? '<div class="sl-warn" style="background:var(--teal-soft);color:var(--teal);font-weight:700">✓ ' + (slStaged(d, e, s).skip ? 'Skipped at the start line' : 'Staged at the start line at ' + fmt(slStaged(d, e, s).at)) + '</div>' : '') + '</section>' +
+      '<div class="meta"><span>Starts <b class="num">' + fmt(e.start) + '</b></span>' + (e.line ? '<span>Line <b>' + esc(e.line) + '</b></span>' : '') + (e.startType ? '<span>' + esc(e.startType) + '</span>' : '') + '<span>' + s.lanes.length + (s.lanes.length === 1 ? ' entry' : ' entries') + '</span>' + (e.clerk ? '<span>Clerk <b>' + esc(e.clerk) + '</b></span>' : '') + '</div>' +
+      (canEditEntries() && s.lanes.length ? '<div class="ent-bar">' + entButton(e) + '</div>' : '') + '</div>' +
+      (s.lanes.length ? '<div class="ci-rows">' + ciRows(d, e, s.lanes) + '</div>' : emptyHeatNote(e)) + (slStaged(d, e, s) ? '<div class="sl-warn" style="background:var(--teal-soft);color:var(--teal);font-weight:700">✓ ' + (slStaged(d, e, s).skip ? 'Skipped at the start line' : 'Staged at the start line at ' + fmt(slStaged(d, e, s).at)) + '</div>' : '') + '</section>' +
     '<div class="ci-bar"><button class="btn" data-cinav="-1"' + (i === 0 ? ' disabled' : '') + ' aria-label="Previous heat">‹ Prev</button><div class="sum">' + ciPills(c) + '</div><button class="btn ' + (c.open ? '' : 'go') + '" data-cinav="1"' + (i === list.length - 1 ? ' disabled' : '') + ' aria-label="Next heat">Next ›</button></div>';
 }
 function ciTap(key){
@@ -1922,10 +1946,10 @@ function slIdx(d, list){
 }
 function slRows(d, e, lanes){
   return lanes.map(function(l){
-    var st = ciState(d, e, l), relay = l.members && l.members.length, team = l.team && l.team !== String(l.name).replace(/\s+[A-D]$/, '') ? l.team : '';
+    var st = ciState(d, e, l), relay = isRelayLane(l), team = l.team && l.team !== String(l.name).replace(/\s+[A-D]$/, '') ? l.team : '';
     var x = st ? d.checkin[ciKey(e, l)] : null, k = esc(ciKey(e, l));
     return '<div class="sl-row ' + (st || 'none') + '"><span class="ln">' + esc(l.lane) + '</span>' +
-      '<span class="who"><b>' + esc(l.name || l.team) + (x && x.late && st === 'in' ? '<span class="late-tag">LATE</span>' : '') + '</b><small>' + esc([l.bib ? '#' + l.bib : '', team].filter(Boolean).join(' · ')) + (relay ? ((l.bib || team) ? '<br>' : '') + esc(l.members.join(' · ')) : '') + '</small></span>' +
+      '<span class="who"><b>' + esc(l.name || l.team) + (x && x.late && st === 'in' ? '<span class="late-tag">LATE</span>' : '') + '</b><small>' + esc([l.bib ? '#' + l.bib : '', team].filter(Boolean).join(' · ')) + (relay ? ((l.bib || team) ? '<br>' : '') + esc(legsText(l)) : '') + '</small></span>' +
       '<span class="st">' + (st === 'in' && x.late ? '<span>Late check-in · ' + fmt(x.at) + '</span><button class="sl-undo" data-slunlate="' + k + '" aria-label="Undo late check-in for ' + esc(l.name || l.team) + '">Undo</button>'
         : st === 'in' ? 'Checked in' : st === 'scr' ? 'Scratched'
         : '<span>Not checked in</span><button class="sl-late" data-sllate="' + k + '" aria-label="Late check-in for ' + esc(l.name || l.team) + ', lane ' + esc(l.lane) + '">Late check-in</button>') + '</span></div>';
@@ -1934,7 +1958,7 @@ function slRows(d, e, lanes){
 function renderStartLine(main){
   var d = activeDay();
   if (!d){ main.innerHTML = '<div class="card empty">No competition days yet.</div>'; return; }
-  if (!ciEvents(d).length){ main.innerHTML = '<div class="card empty"><b>No start lists for ' + esc(d.name) + '.</b><br>Import the meet program under <b>Setup → Import meet program</b>; heats appear here as the clerks check athletes in.</div>'; return; }
+  if (!ciEvents(d).length){ main.innerHTML = '<div class="card empty"><b>No events on ' + esc(d.name) + ' yet.</b><br>Add events on the Schedule, or import the meet program under <b>Setup → Import meet program</b>; heats appear here as the clerks check athletes in.</div>'; return; }
   var names = roster('lineClerk'); ciEvents(d).forEach(function(e){ if (e.lineClerk && names.indexOf(e.lineClerk) < 0) names.push(e.lineClerk); });
   if (UI.slWho && names.indexOf(UI.slWho) < 0) UI.slWho = '';
   var list = slHeats(d);
@@ -1958,8 +1982,8 @@ function renderStartLine(main){
       '<div class="meta"><span>Starts <b class="num">' + fmt(e.start) + '</b></span>' + (e.line ? '<span>Line <b>' + esc(e.line) + '</b></span>' : '') + (e.startType ? '<span><b>' + esc(e.startType) + '</b> start</span>' : '') + (e.lineClerk ? '<span>Line clerk <b>' + esc(e.lineClerk) + '</b></span>' : '') + '</div>' +
       '<div class="ci-cnt" style="justify-content:flex-start;margin-top:8px">' + ciPills(c) + (function(){ var n = s.lanes.filter(function(l){ return ciLate(d, e, l); }).length; return n ? '<span class="ci-pill" style="border-color:var(--amber);color:var(--ink)">' + n + ' late</span>' : ''; })() + '</div></div>' +
       (c.open && !st ? '<div class="sl-warn"><b>' + c.open + (c.open === 1 ? ' athlete hasn\'t' : ' athletes haven\'t') + '</b> been checked in at Clerking yet. Use <b>Late check-in</b> if they report to the start.</div>' : '') +
-      slRows(d, e, s.lanes) + '</section>' +
-    '<div style="margin-top:12px">' + action + '</div>' +
+      (s.lanes.length ? slRows(d, e, s.lanes) : emptyHeatNote(e)) + '</section>' +
+    (s.lanes.length ? '<div style="margin-top:12px">' + action + '</div>' : '') +
     '<div class="ci-bar"><button class="btn" data-slnav="-1"' + (i === 0 ? ' disabled' : '') + '>‹ Prev</button><div class="sum">' + (st ? '' : '<button class="btn sm" data-slskip>Skip this heat…</button>') + '</div>' +
       '<button class="btn ' + (st ? 'go' : '') + '" data-slnav="1"' + (!st || i === list.length - 1 ? ' disabled' : '') + '>Next heat ›</button></div>' +
     (!st ? '<div class="sl-lock">Next unlocks once this heat is staged.</div>' : '');
@@ -2767,7 +2791,7 @@ function ipCommit(){
       if (!h.gender && e.gender) h.gender = e.gender;
       if (!h.startType && e.startType) h.startType = e.startType;
       if (!h.line && e.line) h.line = e.line;
-      h.num = e.num; h.fullName = e.fullName; h.entries = e.entries; if (e.note) h.note = e.note;
+      h.num = e.num; h.fullName = e.fullName; h.entries = mergeEntries(h.entries, e.entries); if (e.note) h.note = e.note;
       stats.updated++;
     });
     d.events.sort(function(a, b){ return (a.start == null ? 1e9 : a.start) - (b.start == null ? 1e9 : b.start); });
@@ -2795,7 +2819,7 @@ function renderSchedule(main){
       (window.claude ? '' : '<button class="btn sm" onclick="window.print()">Print</button>') +
       '<button class="btn sm primary" id="addEv">+ Add event</button>' +
     '</div>' +
-    '<div class="card sched-wrap"><table class="ed"><thead><tr><th style="width:128px">Start</th><th style="width:170px">Event</th><th style="width:112px">Gender</th><th style="width:124px">Start type</th><th style="width:66px">Line</th><th style="width:150px">Clerk</th><th style="width:150px">Line Clerk</th><th style="width:70px">Heats</th><th style="width:80px">Athletes</th><th style="width:80px">Round</th><th style="width:200px">Call scheme</th><th>Call times</th><th class="noprint" style="width:84px"></th></tr></thead><tbody>' +
+    '<div class="card sched-wrap"><table class="ed"><thead><tr><th style="width:128px">Start</th><th style="width:170px">Event</th><th style="width:112px">Gender</th><th style="width:124px">Start type</th><th style="width:66px">Line</th><th style="width:150px">Clerk</th><th style="width:150px">Line Clerk</th><th style="width:70px">Heats</th><th style="width:80px">Athletes</th><th style="width:80px">Round</th><th style="width:200px">Call scheme</th><th>Call times</th><th class="noprint" style="width:' + (canEditEntries() ? 196 : 84) + 'px"></th></tr></thead><tbody>' +
     d.events.map(function(ev){ return schedRow(d, ev); }).join('') +
     '</tbody></table>' + (d.events.length ? '' : '<div class="empty">No events on this day. Click <b>+ Add event</b>.</div>') + '</div>' +
     '<datalist id="lineList">' + Object.keys(lines).sort().map(function(k){ return '<option value="' + esc(k) + '">'; }).join('') + '</datalist>' +
@@ -2816,7 +2840,7 @@ function schedRow(d, ev){
     '<td data-l="Round"><select data-f="round" aria-label="Round">' + opts(ROUNDS, ev.round, false) + '</select></td>' +
     '<td data-l="Call scheme"><select data-f="templateId" aria-label="Call scheme">' + M.templates.map(function(x){ return '<option value="' + x.id + '"' + (x.id === t.id ? ' selected' : '') + '>' + esc(x.name) + '</option>'; }).join('') + '</select></td>' +
     '<td class="calc" data-l="Calls">' + calcCells(ev, t) + '</td>' +
-    '<td class="noprint"><div class="row" style="gap:4px;flex-wrap:nowrap"><button class="btn sm" data-dup title="Duplicate">⧉</button><button class="btn sm warn" data-del title="Delete">✕</button></div></td>' +
+    '<td class="noprint"><div class="row" style="gap:4px;flex-wrap:nowrap">' + (canEditEntries() ? '<button class="btn sm" data-entedit="' + ev.id + '" title="' + (isRelayEv(ev) ? 'Teams and relay legs' : 'Athletes in this event') + '">' + (isRelayEv(ev) ? 'Teams' : 'Athletes') + ' (' + entCount(ev) + ')</button>' : '') + '<button class="btn sm" data-dup title="Duplicate">⧉</button><button class="btn sm warn" data-del title="Delete">✕</button></div></td>' +
   '</tr>';
 }
 function calcCells(ev, t){ return ev.start == null ? '—' : t.calls.map(function(c){ return '<span title="' + esc(c.label) + '">' + esc(c.label.replace(/ ?(call|time|clerking)$/i,'')) + ' <b class="num">' + fmt(ev.start - c.min) + '</b></span>'; }).join(' · '); }
@@ -2937,6 +2961,7 @@ main.addEventListener('click', function(e){
   var t = e.target, b;
   keepAwake();
   if (Acct.click(e)) return;
+  if (entMainClick(e)) return;
   if (Ump.click(e)) return;
   /* start line */
   if ((b = t.closest('[data-sllate]'))){
@@ -3370,22 +3395,23 @@ function statusEvents(d){
     var umpd = Ump.isUmpired(e);
     var bar = stageBar([
       ['Calls', made === cl.length && cl.length ? 'done' : made ? 'now' : 'todo', made + '/' + cl.length],
-      ['Check-in', !cc.open ? 'done' : cc.in ? 'now' : 'todo', cc.in + '/' + (cc.n - cc.scr) + (cc.scr ? ' · ' + cc.scr + ' scr' : '')],
-      ['Staged', stg === H ? 'done' : stg ? 'now' : 'todo', stg + '/' + H + ' heats'],
-      ['Umpired', !umpd ? 'skip' : um === H ? 'done' : um ? 'now' : 'todo', umpd ? um + '/' + H + ' heats' : 'Not umpired'],
+      ['Check-in', !cc.n ? 'todo' : !cc.open ? 'done' : cc.in ? 'now' : 'todo', cc.in + '/' + (cc.n - cc.scr) + (cc.scr ? ' · ' + cc.scr + ' scr' : '')],
+      ['Staged', !H ? 'todo' : stg === H ? 'done' : stg ? 'now' : 'todo', stg + '/' + H + ' heats'],
+      ['Umpired', !umpd ? 'skip' : !H ? 'todo' : um === H ? 'done' : um ? 'now' : 'todo', umpd ? um + '/' + H + ' heats' : 'Not umpired'],
       ['Review', pend ? 'now' : calls ? 'done' : 'todo', pend ? pend + ' open' : calls ? calls + ' decided' : 'No calls'],
       ['Final', fin ? 'done' : 'todo', fin ? Ump.tm(fin.at) : '—']
     ]);
     var isOpen = !!open[e.id];
     var body = '';
-    if (isOpen) body = e.entries.map(function(s){
+    if (isOpen && !H) body = emptyHeatNote(e);
+    else if (isOpen) body = e.entries.map(function(s){
       var h = heatSummary(d, e, s);
       return '<div class="ci-sec"><span>' + esc(secName(s)) + (s.label ? ' · ' + esc(s.label) : '') + '</span><span class="ci-cnt" style="text-transform:none;letter-spacing:0">' + (h.stg ? '<span class="ci-pill staged">' + (h.stg.skip ? 'Not run' : 'Staged ' + fmt(h.stg.at)) + '</span>' : '') + (h.clr ? '<span class="ci-pill">' + h.clr + ' umpire OK' + (h.clr > 1 ? 's' : '') + '</span>' : '') + ciPills(h.c) + '</span></div>' +
-        s.lanes.map(function(l){ var st = athState(d, e, s, l); return '<div class="st-row"><span class="ln">' + esc(l.lane) + '</span><span class="who"><b>' + esc(l.name || l.team) + '</b><small>' + esc([l.bib ? '#' + l.bib : '', l.team && l.team !== l.name ? l.team : ''].filter(Boolean).join(' · ')) + '</small></span>' + stChip(st) + '</div>'; }).join('');
+        s.lanes.map(function(l){ var st = athState(d, e, s, l); return '<div class="st-row"><span class="ln">' + esc(l.lane) + '</span><span class="who"><b>' + esc(l.name || l.team) + '</b><small>' + esc([l.bib ? '#' + l.bib : '', l.team && l.team !== l.name ? l.team : ''].filter(Boolean).join(' · ')) + (isRelayLane(l) ? '<br>' + esc(legsText(l)) : '') + '</small></span>' + stChip(st) + '</div>'; }).join('');
     }).join('');
     return '<section class="ci-ev' + (isOpen ? ' open' : '') + (fin ? ' fin' : '') + '"><button class="ci-evh" data-stog="' + e.id + '" aria-expanded="' + isOpen + '"><span class="chev" aria-hidden="true">▶</span>' +
       '<span class="ci-num">' + (e.num != null ? 'EVENT ' + esc(e.num) : '') + '<br><b class="num" style="color:var(--ink)">' + fmt(e.start) + '</b></span>' +
-      '<span class="ci-name">' + esc(evTitle(e)) + '<small>' + [H + (H === 1 ? ' heat' : ' heats'), e.line ? 'Line ' + esc(e.line) : '', e.start != null && e.start < now && !stg ? '<span style="color:var(--clay)">start time passed</span>' : ''].filter(Boolean).join(' · ') + '</small></span></button>' +
+      '<span class="ci-name">' + esc(evTitle(e)) + '<small>' + [H ? H + (H === 1 ? ' heat' : ' heats') : '<span style="color:var(--clay)">No athletes entered</span>', e.line ? 'Line ' + esc(e.line) : '', e.start != null && e.start < now && !stg ? '<span style="color:var(--clay)">start time passed</span>' : ''].filter(Boolean).join(' · ') + '</small></span></button>' +
       '<div class="evpipe-wrap">' + bar + '</div>' + body + '</section>';
   }).join('');
 }
@@ -3394,7 +3420,7 @@ function statusFind(d){
   if (q.length < 2) return '<div class="card empty">Type at least two letters of a name, team or bib to follow that athlete from check-in to the result.</div>';
   var out = [];
   ciEvents(d).forEach(function(e){ e.entries.forEach(function(s){ s.lanes.forEach(function(l){
-    if ([l.name, l.team, l.bib, (l.members || []).join(' ')].join(' ').toLowerCase().indexOf(q) < 0) return;
+    if ([l.name, l.team, l.bib, (l.members || []).join(' '), (l.legs || []).join(' ')].join(' ').toLowerCase().indexOf(q) < 0) return;
     out.push({ e:e, s:s, l:l });
   }); }); });
   if (!out.length) return '<div class="card empty">No athlete on ' + esc(d.name) + ' matches “' + esc(UI.stQ) + '”.</div>';
@@ -3479,8 +3505,9 @@ function shoeIndex(){
   var map = {}, list = [];
   M.days.forEach(function(d){ d.events.forEach(function(e){ (e.entries || []).forEach(function(s){ s.lanes.forEach(function(l){
     var relay = !!(l.members && l.members.length) || /relay|\dx\d|dmr|smr/i.test(e.name);
-    var legs = !!(l.members && l.members.length);
-    var people = legs ? l.members.map(function(n){ return { name:n, team:l.team, bib:'' }; }) : [{ name:l.name || l.team, team:l.team, bib:l.bib }];
+    var legs = isRelayLane(l), seen = {};
+    var people = legs ? (laneLegs(l) || []).concat(l.members || []).map(cleanMember).filter(function(n){ if (!n || seen[shoeNorm(n)]) return false; seen[shoeNorm(n)] = 1; return true; }).map(function(n){ return { name:n, team:relaySchool(l), bib:'' }; })
+      : [{ name:l.name || l.team, team:l.team, bib:l.bib }];
     people.forEach(function(p){
       if (!p.name) return;
       var key = shoeNorm(p.name) + '|' + shoeNorm(p.team);
@@ -3529,6 +3556,174 @@ function shoePhotoNote(){
   return '<div class="banner" style="margin-top:12px">Photos can\'t be added from this device yet. Adding photos needs Contributor access to the app; ask the meet director to check your access.</div>';
 }
 function renderShoeLog(main){ Ump.shoeLog(main); }
+
+/* =====================================================================
+   Entries — events with nobody entered yet (manually added events, semis and
+   finals before qualifiers are known), athletes added by the clerks from the
+   meet program, and relay legs in running order.
+   ===================================================================== */
+var EMPTY_SECS = typeof WeakMap === 'function' ? new WeakMap() : null;
+/* The heats to walk through. An event with no entries still gets one empty heat so it shows everywhere. */
+function evSecs(e){
+  if (e.entries && e.entries.length) return e.entries;
+  var x = EMPTY_SECS && EMPTY_SECS.get(e);
+  if (!x){ x = { kind:'Heat', num:1, of:1, lanes:[], empty:true }; if (EMPTY_SECS) EMPTY_SECS.set(e, x); }
+  return [x];
+}
+function isRelayEv(e){
+  if (/relay|\b\d\s*x\s*\d|\bdmr\b|\bsmr\b|shuttle/i.test((e.fullName || '') + ' ' + (e.name || ''))) return true;
+  return (e.entries || []).some(function(s){ return s.lanes.some(function(l){ return (l.members && l.members.length) || l.legs; }); });
+}
+/* Meet programs list relay runners with their class year ("Ann Able SR") and some put the relay letter in the team column. */
+function cleanMember(n){ return String(n || '').replace(/\s+(FR|SO|JR|SR|GR|R-?(FR|SO|JR|SR)|\d{1,2})\.?$/i, '').trim(); }
+function relaySchool(l){ return /^'?[A-H]'?$/.test(String(l.team || '').trim()) ? String(l.name || '').replace(/\s+'?[A-H]'?$/, '').trim() : (l.team || String(l.name || '').replace(/\s+'?[A-H]'?$/, '').trim()); }
+function relayLetter(l){ var m = String(l.team || '').match(/^'?([A-H])'?$/) || String(l.name || '').match(/\s'?([A-H])'?$/); return m ? m[1] : ''; }
+function relayName(l){ var L = relayLetter(l); return relaySchool(l) + (L ? ' ' + L : ''); }
+function isRelayLane(l){ return !!((l.legs && l.legs.some(Boolean)) || (l.members && l.members.length)); }
+function laneLegs(l){ return l.legs && l.legs.some(Boolean) ? l.legs : null; }
+/* Legs in running order when the clerks have set them; otherwise the names from the meet program. */
+function legsText(l){
+  var g = laneLegs(l);
+  if (g) return g.map(function(n, i){ return n ? (i + 1) + '. ' + n : ''; }).filter(Boolean).join(' · ');
+  return l.members && l.members.length ? l.members.join(' · ') : '';
+}
+function canEditEntries(){ return ['director', 'headClerk', 'clerk'].indexOf(UI.role) >= 0 && Sync.canWrite(); }
+function entCount(e){ return (e.entries || []).reduce(function(n, s){ return n + s.lanes.length; }, 0); }
+function entButton(e, big){
+  if (!canEditEntries()) return '';
+  var relay = isRelayEv(e), empty = !entCount(e);
+  return '<button class="btn ' + (big ? 'primary' : 'sm') + '" data-entedit="' + e.id + '">' + (empty ? (relay ? 'Enter teams and legs' : 'Enter athletes') : relay ? 'Edit teams and legs' : 'Edit athletes') + '</button>';
+}
+function emptyHeatNote(e, who){
+  return '<div class="ent-empty"><b>No athletes entered yet.</b><span>' + (who === 'ump' ? 'The clerks add them at check-in once the field is known.' : 'Add them from the athletes already in the meet program' + (isRelayEv(e) ? ', with each team\'s runners in leg order.' : '.')) + '</span>' + (who === 'ump' ? '' : entButton(e, true)) + '</div>';
+}
+
+/* ---------- people already in the meet program ---------- */
+function entPeople(){
+  var idx = shoeIndex(), byKey = {}, teams = {};
+  idx.forEach(function(a){ a.ekey = a.name + (a.team ? ' — ' + a.team : ''); byKey[a.ekey.toLowerCase()] = a; if (a.team) teams[a.team] = 1; });
+  return { list:idx, byKey:byKey, teams:Object.keys(teams).sort(function(a, b){ return a.localeCompare(b); }) };
+}
+function entFind(P, v){
+  v = String(v || '').trim(); if (!v) return null;
+  var hit = P.byKey[v.toLowerCase()]; if (hit) return hit;
+  var nm = shoeNorm(v.split(' — ')[0]), same = P.list.filter(function(a){ return shoeNorm(a.name) === nm; });
+  return same.length === 1 ? same[0] : null;
+}
+
+/* ---------- the editor ---------- */
+var ENT = null;
+function openEntries(evId){
+  var f = null; M.days.forEach(function(d){ d.events.forEach(function(e){ if (e.id === evId) f = { d:d, e:e }; }); });
+  if (!f || !canEditEntries()) return;
+  var e = f.e, relay = isRelayEv(e);
+  var secs = JSON.parse(JSON.stringify(e.entries || []));
+  if (!secs.length) secs = [{ kind:'Heat', num:1, of:1, lanes:[] }];
+  secs.forEach(function(s){ if (!s.lanes.length) s.lanes.push({ lane:'1', name:'', team:'', bib:'' }); s.lanes.forEach(function(l){ if (relay && !l.legs) l.legs = (l.members || []).slice(0, 4).map(cleanMember); if (relay) while (l.legs.length < 4) l.legs.push(''); }); });
+  ENT = { d:f.d, e:e, relay:relay, secs:secs, P:entPeople() };
+  var box = $('#dlg');
+  box.innerHTML = '<div class="ov"><div class="modal wide2 ent-ed" role="dialog" aria-modal="true" aria-labelledby="entT">' +
+    '<div class="row" style="align-items:flex-start"><div class="grow"><div class="muted mono-cap" style="font-size:12px;font-weight:800;letter-spacing:.5px">' + (e.num != null ? 'EVENT ' + esc(e.num) + ' · ' : '') + esc(fmt(e.start)) + '</div><h2 id="entT" style="margin:2px 0 0">' + esc(evTitle(e)) + '</h2></div><button class="x" data-ent="close" aria-label="Close">×</button></div>' +
+    '<p class="hint" style="margin:6px 0 10px">' + (relay ? 'Pick each team, then its four runners <b>in leg order</b>. Runners already listed in the meet program are filled in for you; check the order before saving. Umpires choose the runner by leg when they report a foul.' : 'Start typing a name and pick the athlete from the meet program. Their team and bib fill in automatically.') + '</p>' +
+    '<div id="entBody"></div><div class="err" id="entErr" role="alert" hidden></div>' +
+    '<div class="row ent-foot"><button class="btn" data-ent="addheat">+ Add heat</button><span class="grow"></span><button class="btn" data-ent="close">Cancel</button><button class="btn primary" data-ent="save">Save</button></div>' +
+    '<datalist id="entAth">' + ENT.P.list.map(function(a){ return '<option value="' + esc(a.ekey) + '">'; }).join('') + '</datalist>' +
+    '<datalist id="entTeam">' + ENT.P.teams.map(function(t){ return '<option value="' + esc(t) + '">'; }).join('') + '</datalist>' +
+    '</div></div>';
+  entDraw();
+  box.querySelector('.ov').addEventListener('click', entClick);
+  var first = box.querySelector('.ent-who,.ent-team'); if (first && !first.value) first.focus();
+}
+function entWho(l){ return l.name ? l.name + (l.team ? ' — ' + l.team : '') : ''; }
+function entDraw(){
+  var R = ENT.relay;
+  $('#entBody').innerHTML = ENT.secs.map(function(s, h){
+    return '<section class="ent-heat" data-h="' + h + '"><div class="row ent-hh"><b>' + esc((s.kind || 'Heat') + ' ' + (h + 1)) + '</b><span class="muted" style="font-size:13px">' + s.lanes.filter(function(l){ return l.name || l.team; }).length + (R ? ' teams' : ' athletes') + '</span><span class="grow"></span>' + (ENT.secs.length > 1 ? '<button class="btn sm warn" data-ent="delheat">Remove heat</button>' : '') + '</div>' +
+      s.lanes.map(function(l, r){
+        return '<div class="ent-row' + (R ? ' relay' : '') + '" data-r="' + r + '"><label class="ent-ln"><span>Lane</span><input class="f ent-lane" value="' + esc(l.lane) + '" inputmode="numeric" aria-label="Lane"></label>' +
+          (R ? '<label class="ent-main"><span>Team</span><input class="f ent-team" list="entTeam" value="' + esc(l._school != null ? l._school : relaySchool(l)) + '" placeholder="Start typing a team" autocomplete="off"></label>'
+             : '<label class="ent-main"><span>Athlete</span><input class="f ent-who" list="entAth" value="' + esc(entWho(l)) + '" placeholder="Start typing a name" autocomplete="off"></label>') +
+          '<button class="btn sm warn ent-del" data-ent="delrow" aria-label="Remove">×</button>' +
+          (R ? '<div class="ent-legs">' + [0, 1, 2, 3].map(function(k){ return '<label><span>Leg ' + (k + 1) + '</span><input class="f ent-leg" list="entAth" value="' + esc(l.legs[k] || '') + '" placeholder="Runner ' + (k + 1) + '" autocomplete="off"></label>'; }).join('') + '</div>' : '') +
+        '</div>';
+      }).join('') +
+      '<button class="btn sm" data-ent="addrow">+ Add ' + (R ? 'team' : 'athlete') + '</button></section>';
+  }).join('');
+}
+/* Read the form back into ENT.secs without judging it yet. */
+function entRead(){
+  $$('#entBody .ent-heat').forEach(function(sec){
+    var s = ENT.secs[+sec.dataset.h];
+    $$('.ent-row', sec).forEach(function(row){
+      var l = s.lanes[+row.dataset.r]; l.lane = $('.ent-lane', row).value.trim();
+      if (ENT.relay){ l._team = $('.ent-team', row).value.trim(); l.legs = $$('.ent-leg', row).map(function(x){ return x.value.trim(); }); }
+      else l._who = $('.ent-who', row).value.trim();
+    });
+  });
+}
+function entClick(ev){
+  var b = ev.target.closest('[data-ent]'); if (!b) return;
+  var a = b.dataset.ent;
+  if (a === 'close'){ $('#dlg').innerHTML = ''; ENT = null; return; }
+  entRead();
+  var sec = b.closest('.ent-heat'), s = sec ? ENT.secs[+sec.dataset.h] : null;
+  if (a === 'addheat'){ ENT.secs.push({ kind:(ENT.secs[0] && ENT.secs[0].kind) || 'Heat', num:ENT.secs.length + 1, lanes:[{ lane:'1', name:'', team:'', bib:'', legs:ENT.relay ? ['', '', '', ''] : undefined }] }); entSync(); entDraw(); return; }
+  if (a === 'delheat'){ ENT.secs.splice(+sec.dataset.h, 1); entSync(); entDraw(); return; }
+  if (a === 'addrow'){ var used = s.lanes.map(function(l){ return +l.lane || 0; }); s.lanes.push({ lane:String((used.length ? Math.max.apply(null, used) : 0) + 1), name:'', team:'', bib:'', legs:ENT.relay ? ['', '', '', ''] : undefined }); entSync(); entDraw(); var rows = $$('.ent-heat[data-h="' + ENT.secs.indexOf(s) + '"] .ent-row'); var inp = rows.length && rows[rows.length - 1].querySelector('.ent-who,.ent-team'); if (inp) inp.focus(); return; }
+  if (a === 'delrow'){ s.lanes.splice(+b.closest('.ent-row').dataset.r, 1); entSync(); entDraw(); return; }
+  if (a === 'save') entSave();
+}
+/* Keep what was typed when the form is redrawn. */
+function entSync(){ ENT.secs.forEach(function(s){ s.lanes.forEach(function(l){ if (ENT.relay){ if (l._team != null) l._school = l._team; } else if (l._who != null){ var p = l._who.split(' — '); l.name = p[0] || ''; l.team = p[1] || ''; l._typed = l._who; } delete l._team; delete l._who; }); }); }
+function entSave(){
+  var P = ENT.P, errs = [], e = ENT.e, R = ENT.relay, orig = {};
+  (e.entries || []).forEach(function(s){ s.lanes.forEach(function(l){ var k = R ? 't:' + shoeNorm(relaySchool(l)) : 'a:' + shoeNorm(l.name) + '|' + shoeNorm(l.team); (orig[k] = orig[k] || []).push(l); }); });
+  var take = function(k){ return (orig[k] && orig[k].shift()) || null; };
+  var out = [];
+  ENT.secs.forEach(function(s, h){
+    var lanes = [], seen = {};
+    s.lanes.forEach(function(l){
+      var lane = String(l.lane || '').trim();
+      if (R){
+        var team = String(l._team != null ? l._team : relaySchool(l)).trim(), legs = (l.legs || []).map(function(x){ return String(x || '').trim(); });
+        if (!team && !legs.some(Boolean)) return;
+        if (!team){ errs.push('Heat ' + (h + 1) + ', lane ' + (lane || '?') + ': pick the team.'); return; }
+        if (P.teams.indexOf(team) < 0 && !(orig['t:' + shoeNorm(team)] || []).length) errs.push('“' + team + '” isn\'t a team in the meet program.');
+        var clean = legs.map(function(n, k){ if (!n) return ''; var hit = entFind(P, n); if (!hit){ errs.push('Leg ' + (k + 1) + ' for ' + team + ': “' + n + '” isn\'t in the meet program.'); return n; } return hit.name; });
+        var dupe = clean.filter(Boolean).filter(function(n, i, arr){ return arr.indexOf(n) !== i; });
+        if (dupe.length) errs.push(team + ': ' + dupe[0] + ' is entered on two legs.');
+        var o = take('t:' + shoeNorm(team)) || {};
+        lanes.push(Object.assign({}, o, { lane:lane, name:o.name || team, team:o.team || team, bib:o.bib || '', legs:clean, members:o.members && o.members.length ? o.members : clean.filter(Boolean) }));
+      } else {
+        var who = String(l._who != null ? l._who : entWho(l)).trim(); if (!who) return;
+        var hit = entFind(P, who);
+        if (!hit){ errs.push('“' + who + '” isn\'t in the meet program. Pick a name from the list.'); return; }
+        var o2 = take('a:' + shoeNorm(hit.name) + '|' + shoeNorm(hit.team)) || {};
+        lanes.push(Object.assign({}, o2, { lane:lane, name:hit.name, team:hit.team || '', bib:o2.bib || Object.keys(hit.bibs || {})[0] || '' }));
+      }
+      if (!lane) errs.push('Heat ' + (h + 1) + ': every ' + (R ? 'team' : 'athlete') + ' needs a lane.');
+      else if (seen[lane]) errs.push('Heat ' + (h + 1) + ': lane ' + lane + ' is used twice.');
+      seen[lane] = 1;
+    });
+    if (lanes.length) out.push({ kind:s.kind || 'Heat', num:0, label:s.label || '', lanes:lanes.sort(function(a, b){ return (parseFloat(a.lane) || 0) - (parseFloat(b.lane) || 0); }) });
+  });
+  if (errs.length){ var er = $('#entErr'); er.hidden = false; er.innerHTML = errs.slice(0, 6).map(esc).join('<br>'); er.scrollIntoView({ block:'nearest' }); entSync(); return; }
+  out.forEach(function(s, i){ s.num = i + 1; s.of = out.length; });
+  e.entries = out; e.heats = out.length ? String(out.length) : e.heats; e.athletes = out.reduce(function(n, s){ return n + s.lanes.length; }, 0) || ''; e.entriesByClerk = true;
+  $('#dlg').innerHTML = ''; ENT = null;
+  save(); render(); toast(out.length ? 'Saved ' + evTitle(e) + ': ' + e.athletes + (R ? ' teams' : ' athletes') + ' in ' + out.length + (out.length === 1 ? ' heat' : ' heats') : 'Cleared the athletes for ' + evTitle(e));
+}
+function entMainClick(ev){ var b = ev.target.closest('[data-entedit]'); if (!b) return false; openEntries(b.dataset.entedit); return true; }
+/* A re-imported meet program keeps the clerks' work: an event the program still leaves empty keeps the
+   athletes the clerks entered, and relay legs carry over to the same team. */
+function mergeEntries(old, inc){
+  old = old || []; inc = inc || [];
+  if (!inc.length) return old;
+  var key = function(l){ return shoeNorm(relaySchool(l)) + '|' + relayLetter(l); }, legs = {};
+  old.forEach(function(s){ s.lanes.forEach(function(l){ if (laneLegs(l)) legs[key(l)] = l.legs; }); });
+  inc.forEach(function(s){ s.lanes.forEach(function(l){ var g = legs[key(l)]; if (g && !l.legs) l.legs = g.slice(); }); });
+  return inc;
+}
 
 /* =====================================================================
    Accounts & admin — who is signed in, a directory of every account, and an
@@ -3939,7 +4134,7 @@ function banners(){
 }
 
 /* ---------- heats (umpire / chief / referee) ---------- */
-function heatList(){ var out = [], d = activeDay(); dayEvents(d).forEach(function(e){ if (!isUmpired(e)) return; e.entries.forEach(function(s){ out.push({ e:e, s:s, key:e.id + '|' + s.num }); }); }); return out; }
+function heatList(){ var out = [], d = activeDay(); dayEvents(d).forEach(function(e){ if (!isUmpired(e)) return; evSecs(e).forEach(function(s){ out.push({ e:e, s:s, key:e.id + '|' + s.num }); }); }); return out; }
 function heatIdx(list){
   var i = list.findIndex(function(h){ return h.key === UI.uCursor; });
   if (i < 0) i = list.findIndex(function(h){ return !myClear(h.e.id, h.s.num) && !myHeatCalls(h.e.id, h.s.num).length && !(slStaged(activeDay(), h.e, h.s) || {}).skip && !finalOf(h.e.id); });
@@ -3967,7 +4162,7 @@ function laneRows(d, e, s, lanes, canFlag){
     var cs = laneCalls(e.id, s.num, l.lane), st = ciState(d, e, l), x = st ? d.checkin[ciKey(e, l)] : null, stg = slStaged(d, e, s);
     var tag = st === 'in' ? '<span class="ln-st in">' + (x.late ? 'Late check-in' : 'Checked in') + '</span>' : st === 'scr' ? '<span class="ln-st scr">Scratched · empty lane</span>' : '<span class="ln-st out">' + (stg ? 'Not at start' : 'Not checked in') + '</span>';
     return '<tr class="lr-' + (st || 'out') + '"><td><span class="lane">' + esc(l.lane) + '</span></td>' +
-      '<td><div class="ath">' + esc(l.name || l.team) + '<small>' + esc([l.bib ? '#' + l.bib : '', l.team && l.team !== l.name ? l.team : ''].filter(Boolean).join(' · ')) + (l.members && l.members.length ? '<br>' + esc(l.members.join(', ')) : '') + '</small>' + tag + '</div></td>' +
+      '<td><div class="ath">' + esc(l.name || l.team) + '<small>' + esc([l.bib ? '#' + l.bib : '', l.team && l.team !== l.name ? l.team : ''].filter(Boolean).join(' · ')) + (isRelayLane(l) ? '<br>' + esc(legsText(l)) : '') + '</small>' + tag + '</div></td>' +
       '<td class="col-seed num muted">' + esc(l.seed || '') + '</td>' +
       '<td><span class="cell-chips">' + cs.map(function(c){ return '<button class="upill ' + (STATUS[c.status] || {}).cls + '" style="border:0;cursor:pointer" data-uopen="' + c.id + '" title="' + esc(ruleLabel(c)) + '">' + (c.protest && c.protest.status === 'open' ? 'Protest' : (STATUS[c.status] || {}).label) + '</button>'; }).join('') +
       (canFlag && st !== 'scr' ? '<button class="flagbtn" data-uflag="' + e.id + '|' + s.num + '|' + esc(l.lane) + '" aria-label="Report a foul, lane ' + esc(l.lane) + '">' + FLAG + 'Flag</button>' : '') + '</span></td></tr>';
@@ -3998,8 +4193,8 @@ function heatCard(d, list, canFlag){
       '<h2>' + esc(evTitle(e)) + '</h2>' + (e.note ? '<div class="muted" style="font-style:italic;font-size:14px">' + esc(e.note) + '</div>' : '') +
       '<div class="meta"><span>Starts <b class="num">' + fmt(e.start) + '</b></span>' + (s.label ? '<span>' + esc(s.label) + '</span>' : '') + (e.line ? '<span>Line <b>' + esc(e.line) + '</b></span>' : '') + (done ? '<span class="ok-count">✓ ' + done + (done === 1 ? ' umpire' : ' umpires') + ' done</span>' : '') + (fin ? '<span class="upill s-final">Final</span>' : '') + '</div>' +
       clerkLine(d, e, s) + '</div>' +
-      '<div style="overflow-x:auto"><table class="lanes heat-lanes"><tbody>' + laneRows(d, e, s, s.lanes, canFlag) + '</tbody></table></div>' + st + '</section>' +
-    (canFlag ? '<div class="ci-bar"><button class="btn" data-unav="-1"' + (i === 0 ? ' disabled' : '') + ' aria-label="Previous heat">‹ Prev</button>' +
+      (s.lanes.length ? '<div style="overflow-x:auto"><table class="lanes heat-lanes"><tbody>' + laneRows(d, e, s, s.lanes, canFlag) + '</tbody></table></div>' : emptyHeatNote(e, 'ump')) + st + '</section>' +
+    (canFlag && s.lanes.length ? '<div class="ci-bar"><button class="btn" data-unav="-1"' + (i === 0 ? ' disabled' : '') + ' aria-label="Previous heat">‹ Prev</button>' +
       (mine.length ? '<button class="btn primary heat-go" data-uheatok>Done – next heat ›</button>' : '<button class="btn good heat-go" data-uheatok>✓ OK – no violations</button>') +
       '<button class="btn" data-unav="1"' + (i === list.length - 1 ? ' disabled' : '') + ' aria-label="Skip to next heat">Skip ›</button></div>'
       : '<div class="ci-bar"><button class="btn" data-unav="-1"' + (i === 0 ? ' disabled' : '') + '>‹ Prev</button><span></span><button class="btn" data-unav="1"' + (i === list.length - 1 ? ' disabled' : '') + '>Next ›</button></div>');
@@ -4008,16 +4203,17 @@ function allHeats(d, canFlag){
   var q = S.q.trim().toLowerCase(), open = UI.uOpen || (UI.uOpen = {}), out = '', shown = 0;
   dayEvents(d).forEach(function(e){
     if (!isUmpired(e)) return;
-    var secs = e.entries, evHit = !q || ((e.num || '') + ' ' + evTitle(e)).toLowerCase().indexOf(q) >= 0;
-    if (!evHit){ secs = secs.map(function(s){ return Object.assign({}, s, { lanes:s.lanes.filter(function(l){ return [l.name, l.team, l.bib, (l.members || []).join(' ')].join(' ').toLowerCase().indexOf(q) >= 0; }) }); }).filter(function(s){ return s.lanes.length; }); if (!secs.length) return; }
+    var secs = evSecs(e), evHit = !q || ((e.num || '') + ' ' + evTitle(e)).toLowerCase().indexOf(q) >= 0;
+    if (!evHit){ secs = secs.map(function(s){ return Object.assign({}, s, { lanes:s.lanes.filter(function(l){ return [l.name, l.team, l.bib, (l.members || []).join(' '), (l.legs || []).join(' ')].join(' ').toLowerCase().indexOf(q) >= 0; }) }); }).filter(function(s){ return s.lanes.length; }); if (!secs.length) return; }
     shown++;
     var ec = S.calls.filter(function(c){ return c.evId === e.id && c.status !== 'withdrawn'; }), isOpen = q ? true : !!open[e.id], cc = ciCounts(d, e);
     var pend = ec.filter(function(c){ return c.status === 'reported' || c.status === 'referee'; }).length, dq = ec.filter(function(c){ return c.status === 'dq'; }).length, pr = ec.filter(function(c){ return c.protest && c.protest.status === 'open'; }).length;
     out += '<section class="ci-ev' + (isOpen ? ' open' : '') + '"><button class="ci-evh" data-utog="' + e.id + '" aria-expanded="' + isOpen + '"><span class="chev" aria-hidden="true">▶</span>' +
       '<span class="ci-num">' + (e.num != null ? 'EVENT ' + esc(e.num) : '') + '<br><b class="num" style="color:var(--ink)">' + fmt(e.start) + '</b></span>' +
-      '<span class="ci-name">' + esc(evTitle(e)) + '<small>' + [e.entries.length + (e.entries.length === 1 ? ' heat' : ' heats'), eventLayout(e) ? layoutName(eventLayout(e)) : ''].filter(Boolean).join(' · ') + '</small></span>' +
+      '<span class="ci-name">' + esc(evTitle(e)) + '<small>' + [e.entries.length ? e.entries.length + (e.entries.length === 1 ? ' heat' : ' heats') : '<span style="color:var(--clay)">No athletes entered</span>', eventLayout(e) ? layoutName(eventLayout(e)) : ''].filter(Boolean).join(' · ') + '</small></span>' +
       '<span class="ci-cnt">' + (finalOf(e.id) ? '<span class="upill s-final">Final</span>' : '') + (pend ? '<span class="upill s-ref">' + pend + ' pending</span>' : '') + (dq ? '<span class="upill s-dq">' + dq + ' DQ</span>' : '') + (pr ? '<span class="upill s-protest">Protest</span>' : '') + '<span class="ci-pill in">' + cc.in + '/' + cc.n + ' in</span></span></button>';
-    if (isOpen) secs.forEach(function(s){
+    if (isOpen && !e.entries.length) out += emptyHeatNote(e, 'ump');
+    else if (isOpen) secs.forEach(function(s){
       var n = clearsFor(e.id, s.num).length, orig = e.entries.filter(function(x){ return x.num === s.num; })[0] || s;
       out += '<div class="ci-sec"><span>' + esc(secName(s)) + (s.label ? ' · ' + esc(s.label) : '') + (n ? ' <span class="ok-count">✓ ' + n + ' done</span>' : '') + '</span><span class="ci-cnt" style="text-transform:none;letter-spacing:0">' + (slStaged(d, e, orig) ? '<span class="ci-pill staged">Staged</span>' : '') + ciPills(ciCounts(d, e, orig)) + '</span></div><div style="overflow-x:auto"><table class="lanes"><tbody>' + laneRows(d, e, orig, s.lanes, canFlag) + '</tbody></table></div>';
     });
@@ -4047,8 +4243,8 @@ function openReport(evId, sn, lane){
   if (!l) return;
   var st = ciState(d, e, l), name = evTitle(e);
   openSheet('<div class="sh-top"><div><div class="muted mono-cap">' + (e.num != null ? 'EVENT ' + esc(e.num) + ' · ' : '') + esc(secName(s)).toUpperCase() + '</div><h2>Report foul · Lane ' + esc(l.lane) + '</h2></div><button class="x" data-close aria-label="Close">×</button></div>' +
-    '<dl class="kv"><dt>Athlete</dt><dd>' + esc(l.name || l.team) + (l.bib ? ' · #' + esc(l.bib) : '') + '</dd><dt>Team</dt><dd>' + esc(l.team || '—') + '</dd><dt>Event</dt><dd>' + esc(name) + '</dd><dt>Clerking</dt><dd>' + (st === 'in' ? 'Checked in' : 'Not checked in — confirm the lane before submitting') + '</dd></dl>' +
-    '<form id="rform" class="box" style="background:transparent;padding:0">' +
+    '<dl class="kv">' + (isRelayLane(l) ? '<dt>Relay team</dt><dd>' + esc(relayName(l)) + '</dd>' : '<dt>Athlete</dt><dd>' + esc(l.name || l.team) + (l.bib ? ' · #' + esc(l.bib) : '') + '</dd><dt>Team</dt><dd>' + esc(l.team || '—') + '</dd>') + '<dt>Event</dt><dd>' + esc(name) + '</dd><dt>Clerking</dt><dd>' + (st === 'in' ? 'Checked in' : 'Not checked in — confirm the lane before submitting') + '</dd></dl>' +
+    '<form id="rform" class="box" style="background:transparent;padding:0">' + runnerPick(l) +
     '<label class="lbl" for="r-rule">Rule</label><select class="f" id="r-rule" required>' + rules().map(function(r){ var ref = refFor(r, name); return '<option value="' + esc(r.id) + '">' + esc((ref ? ref + ' · ' : '') + r.title) + '</option>'; }).join('') + '</select>' +
     '<span class="hint">' + (S.book ? esc(bookName(S.book)) + ' rulebook' : 'The referee hasn\'t chosen a rulebook yet; rule numbers are added once they do.') + '</span>' +
     '<div><div class="lbl" style="margin-top:6px">Where on the track</div><div class="chips" role="radiogroup">' + LOCS.map(function(x, i){ return '<label><input type="radio" name="loc" id="loc-' + i + '" value="' + x + '"><span>' + x + '</span></label>'; }).join('') + '</div></div>' +
@@ -4060,16 +4256,26 @@ function openReport(evId, sn, lane){
     ev.preventDefault();
     var btn = $('#rform button[type=submit]'); btn.disabled = true;
     var r = rules().filter(function(x){ return x.id === $('#r-rule').value; })[0] || {}, loc = ($('input[name=loc]:checked') || {}).value || '';
-    var notes = $('#r-notes').value.trim(), post = $('#r-post').value.trim();
+    var notes = $('#r-notes').value.trim(), post = $('#r-post').value.trim(), rv = (($('input[name=runner]:checked') || {}).value || '').split('|'), leg = +rv[0] || null, runner = rv[1] || '';
     if (!myUmp()) lsSet('to.post', post);
     if (r.id === 'other' && !notes){ $('#r-err').hidden = false; $('#r-err').textContent = 'Describe the infraction in “What you saw” when the rule is Other.'; btn.disabled = false; return; }
     var now = new Date().toISOString();
-    db.collection(P('calls')).add({ dayId:d.id, evId:e.id, eventNum:e.num == null ? null : e.num, eventName:name, sectionNum:s.num, sectionLabel:secName(s), lane:String(l.lane), bib:l.bib || '', athlete:l.name || l.team || '', team:l.team || '', ciKey:ciKey(e, l),
+    db.collection(P('calls')).add({ dayId:d.id, evId:e.id, eventNum:e.num == null ? null : e.num, eventName:name, sectionNum:s.num, sectionLabel:secName(s), lane:String(l.lane), bib:l.bib || '', athlete:isRelayLane(l) ? relayName(l) : l.name || l.team || '', team:isRelayLane(l) ? relaySchool(l) : l.team || '', leg:leg, runner:runner, ciKey:ciKey(e, l),
       ruleId:r.id || '', ruleRef:refFor(r, name), ruleBook:S.book || '', ruleTitle:r.title || '', umpireNum:myUmp() ? +myUmp().slice(1) : null, layout:eventLayout(e) || '', location:loc, notes:notes, post:post,
       reportedBy:meId, reportedAt:now, status:'reported', protest:null, updatedAt:now, updatedBy:meId, history:[{ at:now, by:meId, role:UI.role, action:'Reported', note:notes }] }).then(function(){
-      closeSheet(); toast('Sent to chief umpire: ' + name + ' ' + secName(s) + ', lane ' + l.lane);
+      closeSheet(); toast('Sent to chief umpire: ' + name + ' ' + secName(s) + ', lane ' + l.lane + (runner ? ' (' + (leg ? 'leg ' + leg + ', ' : '') + runner + ')' : ''));
     }).catch(function(err){ btn.disabled = false; $('#r-err').hidden = false; $('#r-err').textContent = err && err.code === 'invalid_argument' ? 'You don\'t have permission to record calls for this meet.' : 'Couldn\'t send the call. Check your connection and try again.'; });
   });
+}
+function runnerTxt(c){ return c.runner ? ' — ' + (c.leg ? 'Leg ' + c.leg + ': ' : '') + c.runner : ''; }
+function runnerPick(l){
+  if (!isRelayLane(l)) return '';
+  var g = laneLegs(l), opts = g ? g.map(function(n, i){ return n ? { v:(i + 1) + '|' + n, h:'<small>Leg ' + (i + 1) + '</small>' + esc(n) } : null; }).filter(Boolean)
+    : (l.members || []).map(function(n){ return { v:'|' + n, h:esc(n) }; });
+  return '<div><div class="lbl" style="margin-top:6px">Runner who committed the foul</div><div class="chips runners" role="radiogroup" aria-label="Runner">' +
+    opts.map(function(o, i){ return '<label><input type="radio" name="runner" id="rn-' + i + '" value="' + esc(o.v) + '"><span>' + o.h + '</span></label>'; }).join('') +
+    '<label><input type="radio" name="runner" value="" checked><span>Whole team / not sure</span></label></div>' +
+    (g ? '' : '<span class="hint">Clerking hasn\'t entered the leg order for this team, so these are the names from the meet program.</span>') + '</div>';
 }
 function writeCall(id, patch, action, note){
   var cur = S.calls.filter(function(c){ return c.id === id; })[0];
@@ -4091,9 +4297,9 @@ function openDetail(id){
   var f = findEv(c.evId), clerk = '';
   if (f){ var s = f.e.entries.filter(function(x){ return x.num === c.sectionNum; })[0], l = s && s.lanes.filter(function(x){ return String(x.lane) === String(c.lane); })[0]; if (l) clerk = '<dt>Clerking</dt><dd>' + stChip(athState(f.d, f.e, s, l)) + '</dd>'; }
   var H = (c.history || []).map(function(h){ return '<li><b>' + esc(h.action) + '</b> — ' + esc(nameOf(h.by)) + (h.role ? ' (' + esc(ROLE_NAMES[h.role] || h.role) + ')' : '') + ' <span class="when">' + tm(h.at) + '</span>' + (h.note ? '<div class="note">' + esc(h.note) + '</div>' : '') + '</li>'; }).join('');
-  openSheet('<div class="sh-top"><div><div class="muted mono-cap">' + esc(evLabel(c)).toUpperCase() + ' · ' + esc(c.sectionLabel || '').toUpperCase() + ' · LANE ' + esc(c.lane) + '</div><h2>' + esc(c.athlete) + '</h2></div><button class="x" data-close aria-label="Close">×</button></div>' +
+  openSheet('<div class="sh-top"><div><div class="muted mono-cap">' + esc(evLabel(c)).toUpperCase() + ' · ' + esc(c.sectionLabel || '').toUpperCase() + ' · LANE ' + esc(c.lane) + '</div><h2>' + esc(c.athlete) + '</h2>' + (c.runner ? '<div class="runner-tag">' + (c.leg ? 'Leg ' + c.leg + ' · ' : '') + esc(c.runner) + '</div>' : '') + '</div><button class="x" data-close aria-label="Close">×</button></div>' +
     '<div>' + upill(c) + '</div>' +
-    '<dl class="kv"><dt>Event</dt><dd>' + esc(c.eventName) + '</dd><dt>Team</dt><dd>' + esc(c.team || '—') + (c.bib ? ' · #' + esc(c.bib) : '') + '</dd><dt>Rule</dt><dd>' + esc(ruleLabel(c)) + '</dd>' + (c.location ? '<dt>Location</dt><dd>' + esc(c.location) + '</dd>' : '') + '<dt>Umpire</dt><dd>' + esc(nameOf(c.reportedBy)) + (c.post ? ', ' + esc(c.post) : '') + '</dd>' + clerk + '</dl>' +
+    '<dl class="kv"><dt>Event</dt><dd>' + esc(c.eventName) + '</dd>' + (c.runner ? '<dt>Runner</dt><dd>' + (c.leg ? 'Leg ' + c.leg + ' · ' : '') + esc(c.runner) + '</dd>' : '') + '<dt>Team</dt><dd>' + esc(c.team || '—') + (c.bib ? ' · #' + esc(c.bib) : '') + '</dd><dt>Rule</dt><dd>' + esc(ruleLabel(c)) + '</dd>' + (c.location ? '<dt>Location</dt><dd>' + esc(c.location) + '</dd>' : '') + '<dt>Umpire</dt><dd>' + esc(nameOf(c.reportedBy)) + (c.post ? ', ' + esc(c.post) : '') + '</dd>' + clerk + '</dl>' +
     act + '<div class="err" id="d-err" hidden></div><div><h3 class="section-title" style="font-size:15px;margin-bottom:8px">History</h3><ul class="timeline">' + H + '</ul></div>');
   $$('#sheetRoot [data-act]').forEach(function(b){ b.addEventListener('click', function(){
     var a = b.dataset.act, note = (($('#d-note') || {}).value || '').trim(), cur = S.calls.filter(function(x){ return x.id === id; })[0];
@@ -4126,7 +4332,7 @@ function badge(){ if (!live()) return 0; if (UI.role === 'timing') return timing
 function dayTag(c){ var d = activeDay(); if (!c.dayId || (d && d.id === c.dayId)) return ''; var x = day(c.dayId); return x ? ' · ' + esc(x.name) : ''; }
 function qcard(c){
   return '<button class="qcard" data-uopen="' + c.id + '"><span class="lane">' + esc(c.lane) + '</span><span class="t">' + esc(evLabel(c)) + ' <span class="muted num">' + esc(c.sectionLabel) + dayTag(c) + '</span></span><span>' + upill(c) + '</span>' +
-    '<span class="d">' + esc(c.athlete) + (c.team ? ' (' + esc(c.team) + ')' : '') + ' — ' + esc(ruleLabel(c)) + (c.location ? ' · ' + esc(c.location) : '') + ' · ' + esc(nameOf(c.reportedBy)) + (c.post ? ', ' + esc(c.post) : '') + ' · ' + tm(c.reportedAt) + '</span></button>';
+    '<span class="d">' + esc(c.athlete + runnerTxt(c)) + (c.team && String(c.athlete).indexOf(c.team) !== 0 ? ' (' + esc(c.team) + ')' : '') + ' — ' + esc(ruleLabel(c)) + (c.location ? ' · ' + esc(c.location) : '') + ' · ' + esc(nameOf(c.reportedBy)) + (c.post ? ', ' + esc(c.post) : '') + ' · ' + tm(c.reportedAt) + '</span></button>';
 }
 function byNew(a, b){ return (b.updatedAt || b.reportedAt || '').localeCompare(a.updatedAt || a.reportedAt || ''); }
 function renderInbox(main){
@@ -4194,7 +4400,7 @@ function renderTiming(){
     var cc = ciCounts(d, e), stg = e.entries.filter(function(s){ return slStaged(d, e, s); }).length;
     var chip = { final:'<span class="upill s-final">Final</span>', changed:'<span class="upill s-dq">Changed after final</span>', pending:'<span class="upill s-ref">' + pend.length + ' in progress</span>', ready:'<span class="upill s-reported">Ready to finalize</span>', open:'<span class="upill s-closed">No calls</span>' }[st];
     out += '<section class="tevent st-' + st + '"><div class="tev-h"><span class="ci-num">' + (e.num != null ? 'EVENT ' + esc(e.num) : '') + '<br><b class="num" style="color:var(--ink)">' + fmt(e.start) + '</b></span><span class="ci-name grow">' + esc(evTitle(e)) + '<small>' + cc.in + ' checked in · ' + cc.scr + ' scratched · ' + stg + '/' + e.entries.length + ' heats staged</small></span>' + chip + '</div>';
-    if (calls.length) out += '<div class="tcalls">' + calls.map(function(c){ return '<button class="tcall" data-uopen="' + c.id + '"><span class="lane">' + esc(c.lane) + '</span><span class="tc-body"><span class="tc-t">' + esc(c.athlete) + ' <span class="muted">· ' + esc(c.sectionLabel) + '</span></span><span class="tc-r">' + esc(ruleLabel(c)) + '</span>' + pipe(c) + '</span></button>'; }).join('') + '</div>';
+    if (calls.length) out += '<div class="tcalls">' + calls.map(function(c){ return '<button class="tcall" data-uopen="' + c.id + '"><span class="lane">' + esc(c.lane) + '</span><span class="tc-body"><span class="tc-t">' + esc(c.athlete + runnerTxt(c)) + ' <span class="muted">· ' + esc(c.sectionLabel) + '</span></span><span class="tc-r">' + esc(ruleLabel(c)) + '</span>' + pipe(c) + '</span></button>'; }).join('') + '</div>';
     else { var n = S.clears.filter(function(c){ return c.evId === e.id; }).length; out += '<p class="tnone">No violations reported' + (n ? ' · ' + n + ' umpire OK' + (n > 1 ? 's' : '') + ' logged' : '') + '.</p>'; }
     var ch = changedAfterFinal(e.id);
     out += '<div class="tfoot">';
@@ -4206,7 +4412,7 @@ function renderTiming(){
       out += '<p class="muted" style="margin:0">Can\'t finalize yet: ' + pend.length + (pend.length === 1 ? ' call is' : ' calls are') + ' still with the ' + pend.map(function(c){ return c.protest && c.protest.status === 'open' ? 'referee (protest)' : c.status === 'reported' ? 'chief umpire' : 'referee'; }).filter(function(x, i, a){ return a.indexOf(x) === i; }).join(' and ') + '.</p>';
     } else if (cw()){
       var fu = S.finUI[e.id] || {};
-      out += (dqs.length ? '<div class="dqlist"><b>Enter these DQs in the official results:</b><ul>' + dqs.map(function(c){ return '<li>' + esc(c.sectionLabel) + ', lane ' + esc(c.lane) + ' – ' + esc(c.athlete) + (c.team ? ' (' + esc(c.team) + ')' : '') + ' – ' + esc(ruleLabel(c)) + '</li>'; }).join('') + '</ul></div>' : '') +
+      out += (dqs.length ? '<div class="dqlist"><b>Enter these DQs in the official results:</b><ul>' + dqs.map(function(c){ return '<li>' + esc(c.sectionLabel) + ', lane ' + esc(c.lane) + ' – ' + esc(c.athlete + runnerTxt(c)) + (c.team ? ' (' + esc(c.team) + ')' : '') + ' – ' + esc(ruleLabel(c)) + '</li>'; }).join('') + '</ul></div>' : '') +
         '<label class="chk"><input type="checkbox" id="fin-ok-' + e.id + '" data-ufinui="' + e.id + '"' + (fu.ok ? ' checked' : '') + '> ' + (dqs.length ? 'I\'ve updated the official results with these decisions' : 'Official results are complete for this event') + '</label>' +
         '<div class="actions"><input class="f fin-note" id="fin-note-' + e.id + '" data-ufinui="' + e.id + '" value="' + esc(fu.note || '') + '" placeholder="Note (optional)" aria-label="Final note"><button class="btn good" data-ufinal="' + e.id + '" style="flex:0 0 auto">Mark event final</button></div>';
     }
@@ -4219,7 +4425,7 @@ function markFinal(id){
   var box = document.getElementById('fin-ok-' + id); if (box && !box.checked){ toast('Confirm the official results are updated first.'); box.focus(); return; }
   if (evPending(id).length){ toast('This event still has calls in progress.'); return; }
   var ni = document.getElementById('fin-note-' + id), note = (ni && ni.value.trim()) || (S.finals[id] ? S.finals[id].note || '' : '');
-  var dqs = evCalls(id).filter(function(c){ return c.status === 'dq'; }).map(function(c){ return { id:c.id, section:c.sectionLabel, lane:c.lane, athlete:c.athlete, team:c.team || '', rule:ruleLabel(c) }; });
+  var dqs = evCalls(id).filter(function(c){ return c.status === 'dq'; }).map(function(c){ return { id:c.id, section:c.sectionLabel, lane:c.lane, athlete:c.athlete + runnerTxt(c), team:c.team || '', rule:ruleLabel(c) }; });
   db.doc(P('finals/' + safeId(id))).set({ dayId:f.d.id, evId:id, eventNum:e.num == null ? null : e.num, eventName:evTitle(e), final:true, at:new Date().toISOString(), by:meId, note:note, dqs:dqs }).then(function(){ delete S.finUI[id]; toast(evTitle(e) + ' marked final'); })
     .catch(function(err){ toast(err && err.code === 'invalid_argument' ? 'You don\'t have permission to finalize events for this meet.' : 'Couldn\'t save. Try again.'); });
 }
