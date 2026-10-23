@@ -845,6 +845,17 @@ nav.tabs{justify-content:safe center}
 .xzones .cl-h{font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--muted)}
 @media (min-width:641px) and (max-width:1000px){ .ump-row{grid-template-columns:34px minmax(0,1fr) minmax(0,1fr)} .ump-row .u-name{grid-column:2/-1} .ump-row .pos:nth-of-type(odd){grid-column:2} }
 
+/* ---------- clerking turned off for the meet ---------- */
+.clerk-switch{margin-top:14px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}
+.clerk-switch input{width:20px;height:20px;margin-top:2px;flex:0 0 auto}
+.noclerk #runPill,.noclerk #btnSound,.noclerk #btnVoice{display:none}
+.noclerk table.ed th:nth-child(6),.noclerk table.ed th:nth-child(7),.noclerk table.ed th:nth-child(11),.noclerk table.ed th:nth-child(12),
+.noclerk table.ed td[data-l="Clerk"],.noclerk table.ed td[data-l="Line Clerk"],.noclerk table.ed td[data-l="Call scheme"],.noclerk table.ed td.calc{display:none}
+@media (min-width:1280px){ .noclerk table.ed{min-width:0} }
+.lanes tr.lr-na .lane{background:var(--navy);color:#fff}
+.stchip.sc-entered{background:var(--surface-2);color:var(--ink)}
+.clerk-switch label{flex-wrap:nowrap}
+
 </style>
 <script>
 /* Firebase backend for the hosted copy (GitHub Pages). Inside Claude the platform supplies shared data,
@@ -1817,6 +1828,8 @@ function setTabs(){
 }
 function render(){
   document.body.classList.toggle('nomeet', !M);
+  document.body.classList.toggle('noclerk', !clerkOn());
+  if (M && !clerkOn() && ROLE_DEFS[UI.role] && ROLE_DEFS[UI.role].group === 'clerk' && !$('#dlg .rolepick')){ setRole('', ''); setTimeout(function(){ roleDialog(false); toast('Clerking is turned off for this meet. Pick another role.'); }, 0); }
   document.body.setAttribute('data-group', rgroup() || 'none');
   if (!M){
     if (UI.view === 'admin' && Acct.isAdmin()){ setTabs(); $('#meetName').textContent = 'Admin'; $('#dayLabel').textContent = 'Accounts and meets'; Acct.renderAdmin($('#main')); return; }
@@ -2242,7 +2255,7 @@ var Sync = (function(){
   function plain(o){ return JSON.parse(JSON.stringify(o)); }
   function base(id){ return 'meets/' + id; }
 
-  function metaDef(m){ return { owner:m.owner || null, ownerName:m.ownerName || '', archived:!!m.archived, archivedAt:m.archivedAt || '', name:m.name || '', templates:m.templates, officials:m.officials, notes:m.notes, dayOrder:m.days.map(function(d){ return d.id; }), mapOrder:m.maps.map(function(x){ return x.id; }) }; }
+  function metaDef(m){ return { clerking:m.clerking !== false, owner:m.owner || null, ownerName:m.ownerName || '', archived:!!m.archived, archivedAt:m.archivedAt || '', name:m.name || '', templates:m.templates, officials:m.officials, notes:m.notes, dayOrder:m.days.map(function(d){ return d.id; }), mapOrder:m.maps.map(function(x){ return x.id; }) }; }
   function dayDef(d){ return { name:d.name, date:d.date || '', defaultTemplateId:d.defaultTemplateId || null, mapId:d.mapId || null, events:d.events }; }
   function mapDef(x){ return { name:x.name, markers:x.markers || {}, src:x.src }; }
   function defsOf(m){ var o = { meta:metaDef(m) }; m.days.forEach(function(d){ o['day:' + d.id] = dayDef(d); }); m.maps.forEach(function(x){ o['map:' + x.id] = mapDef(x); }); return o; }
@@ -2340,6 +2353,7 @@ var Sync = (function(){
   function applyMeta(m, data){
     var s = S(m);
     if (!data || !(data.updated > (s.dt.meta || 0))) return false;
+    if (typeof data.clerking === 'boolean') m.clerking = data.clerking;
     if (data.owner) { m.owner = data.owner; m.ownerName = data.ownerName || ''; } m.archived = data.archived === true; m.archivedAt = data.archivedAt || '';
     m.name = data.name || m.name; if (data.templates) m.templates = data.templates; if (data.officials) m.officials = data.officials; if (data.notes) m.notes = data.notes;
     if (data.dayOrder){
@@ -2947,7 +2961,8 @@ function renderSetup(main){
       '<div class="row" style="gap:4px;flex-wrap:nowrap"><button class="btn sm" data-dmove="-1"' + (i===0?' disabled':'') + ' title="Move up">↑</button><button class="btn sm" data-dmove="1"' + (i===M.days.length-1?' disabled':'') + ' title="Move down">↓</button><button class="btn sm" data-dcopy title="Copy day">⧉</button><button class="btn sm warn" data-ddel title="Delete day">✕</button></div></div>';
     }).join('') +
     '<div class="row" style="margin-top:10px"><button class="btn primary" id="addDay">+ Add day</button><button class="btn" id="resetDay">Reset call status for active day</button></div>' +
-    '<p class="hint">Set a date on each day and the app opens straight to that day\'s schedule when the date arrives.</p></div>');
+    '<p class="hint">Set a date on each day and the app opens straight to that day\'s schedule when the date arrives.</p>' +
+    '<div class="clerk-switch"><label class="row" style="gap:10px;align-items:flex-start"><input type="checkbox" id="mClerk"' + (clerkOn() ? ' checked' : '') + '><span><b>Use clerking in this meet</b><br><span class="muted" style="font-size:14px">Check-in, the start line, call announcements and clerking roles. Turn this off when the meet uses another clerking method: umpires then see every entered athlete as competing. Shoe check stays available, and nothing is deleted if you turn it back on.</span></span></label></div></div>');
   var dataC = (!cM ? '' : 
   '<div class="card pad"><h2>Data</h2>' +
     '<div class="row"><button class="btn primary" id="impProg">Import meet program…</button></div>' +
@@ -2973,14 +2988,14 @@ function renderSetup(main){
         '<button class="btn sm" data-cadd style="margin-top:8px">+ Add call</button></div>';
     }).join('') + '<button class="btn primary" id="addTpl">+ Add call scheme</button></div>');
   /* Referee and meet director: Meet, Data, Rulebook. Head clerk: Meet, Data, Alerts, Call schemes, Clerking officials. One full-width row each. */
-  if (role === 'referee' || role === 'director'){ main.innerHTML = '<div class="grid2 rows">' + meetC + dataC + Ump.rulesSection() + '</div>'; return; }
+  if (role === 'referee' || role === 'director'){ main.innerHTML = '<div class="grid2 rows">' + meetC + dataC + Ump.rulesSection() + (role === 'director' && !clerkOn() ? officialsCard('shoeCheck') : '') + '</div>'; return; }
   if (role === 'headClerk'){ main.innerHTML = '<div class="grid2 rows">' + meetC + dataC + alertsC + schemesC + officialsCard() + '</div>'; return; }
   main.innerHTML = '<div class="grid2">' + (cM ? '' : '<div class="card pad" style="grid-column:1/-1"><b>Meet setup is handled by the meet director, head clerk or referee.</b> <span class="muted">Below are the umpiring settings for your role.</span></div>') +
     (cC ? officialsCard() : '') + (cM ? '<div class="stack">' + meetC + Ump.rulesSection() + '</div>' : '') + alertsC + Ump.setupCards(cM) + schemesC + dataC + '</div>';
 }
-function officialsCard(){
-  return '<div class="card pad" id="officials"><h2>Clerking officials</h2><p class="hint" style="margin-top:0">Names entered here appear in the Clerk and Line Clerk drop-downs on the Schedule, and each gets an access code. Renaming someone updates every event they\'re assigned to.</p>' +
-    ROLES.map(function(r){
+function officialsCard(only){
+  return '<div class="card pad" id="officials">' + (only ? '<h2>Shoe check officials</h2><p class="hint" style="margin-top:0">Each name gets an access code on the Access page.</p>' : '<h2>Clerking officials</h2><p class="hint" style="margin-top:0">Names entered here appear in the Clerk and Line Clerk drop-downs on the Schedule, and each gets an access code. Renaming someone updates every event they\'re assigned to.</p>') +
+    ROLES.filter(function(r){ return !only || r.key === only; }).map(function(r){
       var list = M.officials[r.key], n = list.length;
       return '<div class="tpl" data-role="' + r.key + '"><div class="row" style="margin-bottom:8px"><b class="grow">' + esc(r.label) + '</b><label class="row" style="gap:6px;font-size:13px">How many <select class="f" data-ofcount style="width:auto">' +
         Array.from({length:r.max}, function(_, i){ return '<option' + (i+1 === n ? ' selected' : '') + '>' + (i+1) + '</option>'; }).join('') + '</select></label></div>' +
@@ -3142,6 +3157,7 @@ main.addEventListener('change', function(e){
     applyCount(); return;
   }
   if (t.id === 'mName'){ M.name = t.value.trim(); save(); render(); return; }
+  if (t.id === 'mClerk'){ M.clerking = t.checked; save(); render(); toast(t.checked ? 'Clerking is on for this meet' : 'Clerking is off. Umpiring and shoe check carry on without it.'); return; }
   if (t.dataset.df){ var d2 = day(t.closest('[data-day]').dataset.day); d2[t.dataset.df] = t.value || (t.dataset.df === 'mapId' ? null : ''); save(); render(); return; }
   if (t.dataset.set){ M.settings[t.dataset.set] = t.checked; save(); render(); return; }
   if (t.id === 'catchup'){ M.settings.catchup = Math.max(0, +t.value || 0); save(); return; }
@@ -3285,7 +3301,9 @@ UI.role = ROLE_DEFS[lsGet('to.role', '')] ? lsGet('to.role', '') : '';
 function rgroup(){ return (ROLE_DEFS[UI.role] || {}).group || ''; }
 function isClerkRole(){ return rgroup() === 'clerk'; }
 function inboxLabel(){ return UI.role === 'umpire' ? 'My Calls' : (UI.role === 'chief' || UI.role === 'assistant') ? 'Review' : UI.role === 'timing' ? 'Results' : 'Decisions'; }
-function roleTabs(){ return ROLE_TABS[UI.role] || ROLE_TABS.director; }
+function clerkOn(){ return !M || M.clerking !== false; }
+var CLERK_TABS = { live:1, checkin:1, startline:1, notes:1 };
+function roleTabs(){ var t = ROLE_TABS[UI.role] || ROLE_TABS.director; return clerkOn() ? t : t.filter(function(v){ return !CLERK_TABS[v]; }); }
 function canSetupMeet(){ return ['director','headClerk','referee'].indexOf(UI.role) >= 0; }
 function canSetupClerk(){ return ['director','headClerk'].indexOf(UI.role) >= 0; }
 function canSetupUmp(){ return ['director','chief','referee'].indexOf(UI.role) >= 0; }
@@ -3326,7 +3344,7 @@ function roleChip(){
 }
 function roleDialog(firstRun){
   var cur = UI.role, d = Ump.offData(), n = Math.max(1, Math.min(40, d.umpireCount || 1));
-  var groups = ['meet','clerk','ump'];
+  var groups = clerkOn() ? ['meet','clerk','ump'] : ['meet','ump'];
   var html = '<div class="rp-head"><h2 id="rpT">' + (firstRun ? 'What is your job at this meet?' : 'Change role') + '</h2>' +
     '<p class="rp-sub">Each role sees only its own work. Everyone shares the same events, heats and athletes.</p></div>' +
     '<div class="rp-groups" role="radiogroup" aria-labelledby="rpT">' +
@@ -3369,9 +3387,9 @@ function roleDialog(firstRun){
 /* =====================================================================
    Athlete status — one line per athlete from check-in to the result
    ===================================================================== */
-var ST_LABEL = { out:'Not checked in', in:'Checked in', late:'Late check-in', track:'On the track', raced:'Competed', review:'Call under review', dq:'Disqualified', nodq:'Cleared on review', final:'Final', dqfinal:'DQ · final', dns:'Did not start', scr:'Scratched', skip:'Heat not run' };
+var ST_LABEL = { entered:'Entered', out:'Not checked in', in:'Checked in', late:'Late check-in', track:'On the track', raced:'Competed', review:'Call under review', dq:'Disqualified', nodq:'Cleared on review', final:'Final', dqfinal:'DQ · final', dns:'Did not start', scr:'Scratched', skip:'Heat not run' };
 function athState(d, e, s, l){
-  var ci = d.checkin && d.checkin[ciKey(e, l)], stg = slStaged(d, e, s);
+  var off = !clerkOn(), ci = off ? null : d.checkin && d.checkin[ciKey(e, l)], stg = off ? null : slStaged(d, e, s);
   var calls = Ump.laneCalls(e.id, s.num, l.lane), heatCalls = Ump.heatCalls(e.id, s.num), clears = Ump.clearsFor(e.id, s.num), fin = Ump.finalOf(e.id);
   var raced = clears.length > 0 || heatCalls.length > 0 || !!fin;
   var openP = function(c){ return c.protest && c.protest.status === 'open'; };
@@ -3381,7 +3399,7 @@ function athState(d, e, s, l){
   var code;
   if (ci && ci.s === 'scr') code = 'scr';
   else if (stg && stg.skip) code = 'skip';
-  else if (!ci && (stg || raced)) code = 'dns';
+  else if (!off && !ci && (stg || raced)) code = 'dns';
   else if (fin) code = dq ? 'dqfinal' : 'final';
   else if (pend) code = 'review';
   else if (dq) code = 'dq';
@@ -3389,16 +3407,16 @@ function athState(d, e, s, l){
   else if (raced) code = 'raced';
   else if (stg) code = 'track';
   else if (ci) code = ci.late ? 'late' : 'in';
-  else code = 'out';
+  else code = off ? 'entered' : 'out';
   return { code:code, label:ST_LABEL[code], ci:ci, stg:stg, calls:calls, clears:clears, fin:fin, raced:raced, pend:pend, dq:dq };
 }
 function stChip(st){ return '<span class="stchip sc-' + st.code + '">' + esc(st.label) + '</span>'; }
 function athPipe(st){
   var steps = [];
-  var ci = st.ci;
-  steps.push(ci && ci.s === 'scr' ? ['Check-in','skip','Scratched'] : ci ? ['Check-in','done',(ci.late ? 'Late · ' : '') + fmt(ci.at)] : st.code === 'dns' ? ['Check-in','skip','Missed'] : ['Check-in','now','Waiting']);
+  var ci = st.ci, off = !clerkOn();
+  if (!off) steps.push(ci && ci.s === 'scr' ? ['Check-in','skip','Scratched'] : ci ? ['Check-in','done',(ci.late ? 'Late · ' : '') + fmt(ci.at)] : st.code === 'dns' ? ['Check-in','skip','Missed'] : ['Check-in','now','Waiting']);
   var stage = st.code === 'scr' ? ['Start line','skip',''] : st.stg ? (st.stg.skip ? ['Start line','skip','Heat not run'] : ['Start line', ci ? 'done' : 'skip', ci ? 'Staged ' + fmt(st.stg.at) : 'Not at start']) : ['Start line', ci ? 'now' : 'todo', ''];
-  steps.push(stage);
+  if (!off) steps.push(stage);
   var race = st.code === 'scr' || st.code === 'dns' || st.code === 'skip' ? ['Race','skip',''] : st.raced ? ['Race','done', st.clears.length ? st.clears.length + ' umpire OK' + (st.clears.length > 1 ? 's' : '') : 'Run'] : st.stg ? ['Race','now','On track'] : ['Race','todo',''];
   steps.push(race);
   var call = st.calls.length ? ['Umpires', st.pend ? 'now' : 'done', st.pend ? Ump.callStage(st.calls) : st.dq ? 'DQ' : 'No DQ'] : st.raced && st.code !== 'dns' ? ['Umpires','done','No calls'] : ['Umpires', st.code === 'scr' || st.code === 'dns' ? 'skip' : 'todo', ''];
@@ -3424,8 +3442,8 @@ function renderStatus(main){
   });
   var mode = UI.stMode || 'events';
   var head = '<div class="tsum">' +
-    '<div><b class="num">' + tot.in + '<small>/' + (tot.n - tot.scr) + '</small></b><span>athletes checked in' + (tot.scr ? ' · ' + tot.scr + ' scratched' : '') + '</span></div>' +
-    '<div><b class="num">' + tot.staged + '<small>/' + tot.heats + '</small></b><span>heats staged at the start</span></div>' +
+    (clerkOn() ? '<div><b class="num">' + tot.in + '<small>/' + (tot.n - tot.scr) + '</small></b><span>athletes checked in' + (tot.scr ? ' · ' + tot.scr + ' scratched' : '') + '</span></div>' +
+    '<div><b class="num">' + tot.staged + '<small>/' + tot.heats + '</small></b><span>heats staged at the start</span></div>' : '<div><b class="num">' + tot.n + '</b><span>athletes entered</span></div>') +
     '<div><b class="num">' + tot.umped + '<small>/' + tot.heats + '</small></b><span>heats umpired</span></div>' +
     '<div' + (tot.pend ? ' class="hot"' : '') + '><b class="num">' + tot.pend + '</b><span>calls under review</span></div>' +
     '<div><b class="num">' + tot.fin + '<small>/' + tot.evs + '</small></b><span>events final</span></div></div>' +
@@ -3442,14 +3460,14 @@ function statusEvents(d){
     e.entries.forEach(function(s){ var h = heatSummary(d, e, s); if (h.stg) stg++; if (h.clr || h.calls.length) um++; pend += h.pend; calls += h.calls.length; });
     var cl = evTpl(d, e).calls, made = cl.filter(function(c, i){ var x = d.status[e.id + '|' + i]; return x; }).length;
     var umpd = Ump.isUmpired(e);
-    var bar = stageBar([
+    var bar = stageBar([].concat(clerkOn() ? [
       ['Calls', made === cl.length && cl.length ? 'done' : made ? 'now' : 'todo', made + '/' + cl.length],
       ['Check-in', !cc.n ? 'todo' : !cc.open ? 'done' : cc.in ? 'now' : 'todo', cc.in + '/' + (cc.n - cc.scr) + (cc.scr ? ' · ' + cc.scr + ' scr' : '')],
-      ['Staged', !H ? 'todo' : stg === H ? 'done' : stg ? 'now' : 'todo', stg + '/' + H + ' heats'],
+      ['Staged', !H ? 'todo' : stg === H ? 'done' : stg ? 'now' : 'todo', stg + '/' + H + ' heats']] : [], [
       ['Umpired', !umpd ? 'skip' : !H ? 'todo' : um === H ? 'done' : um ? 'now' : 'todo', umpd ? um + '/' + H + ' heats' : 'Not umpired'],
       ['Review', pend ? 'now' : calls ? 'done' : 'todo', pend ? pend + ' open' : calls ? calls + ' decided' : 'No calls'],
       ['Final', fin ? 'done' : 'todo', fin ? Ump.tm(fin.at) : '—']
-    ]);
+    ]));
     var isOpen = !!open[e.id];
     var body = '';
     if (isOpen && !H) body = emptyHeatNote(e);
@@ -3514,7 +3532,7 @@ function accessList(){
   var d = Ump.offData(), N = Math.max(1, Math.min(40, d.umpireCount || 1)), out = [];
   out.push({ pos:'director', title:'Meet Director', name:'', group:'meet', detail:ROLE_DEFS.director.hint });
   out.push({ pos:'timing', title:'Timing', name:d.timing, group:'meet', detail:ROLE_DEFS.timing.hint });
-  [['headClerk','hc'],['clerk','ck'],['lineClerk','lc'],['shoeCheck','sc']].forEach(function(r){
+  [['headClerk','hc'],['clerk','ck'],['lineClerk','lc'],['shoeCheck','sc']].filter(function(r){ return clerkOn() || r[0] === 'shoeCheck'; }).forEach(function(r){
     var list = M.officials[r[0]] || [], any = false;
     list.forEach(function(nm, i){ if ((nm || '').trim()){ any = true; out.push({ pos:r[1] + (i + 1), title:ROLE_DEFS[r[0]].label, name:nm.trim(), group:'clerk', detail:ROLE_DEFS[r[0]].hint }); } });
     if (!any) out.push({ pos:r[1] + '1', title:ROLE_DEFS[r[0]].label, name:'', group:'clerk', detail:'Add names under Setup → Officials for a code per person' });
@@ -3533,7 +3551,7 @@ function renderAccess(main){
     '<span class="qr-act"><button class="btn sm" data-qrbig="' + a.pos + '">Show large</button><button class="btn sm" data-qrcopy="' + a.pos + '">Copy link</button></span></div></div>'; };
   var sec = function(t, g){ var x = list.filter(function(a){ return a.group === g; }); return x.length ? '<h2 class="section-title">' + t + '</h2><div class="qr-grid">' + x.map(card).join('') + '</div>' : ''; };
   main.innerHTML = '<div class="card pad"><h2>Access codes · ' + esc(M.name) + '</h2><p class="hint" style="margin-top:0;font-size:14px">Each official scans their code with their phone\'s camera. The app opens on that device with this meet and their role already set: clerks land on Live Calls or the Start Line, umpires on their heats with their posts, the chief, referee and timing on their queues. The code sets up the device; each person still needs to be signed in with access to this app.</p>' + (lib ? '' : '<p class="err">The QR code library didn\'t load. Use Copy link to send each official their link.</p>') + '</div>' +
-    sec('Meet', 'meet') + sec('Clerking', 'clerk') + sec('Lead officials', 'ump') + sec('Umpires', 'umps');
+    sec('Meet', 'meet') + sec(clerkOn() ? 'Clerking' : 'Shoe check', 'clerk') + sec('Lead officials', 'ump') + sec('Umpires', 'umps');
 }
 function showQrBig(pos){
   var a = accessList().filter(function(x){ return x.pos === pos; })[0]; if (!a) return;
@@ -3636,7 +3654,7 @@ function legsText(l){
   if (g) return g.map(function(n, i){ return n ? (i + 1) + '. ' + n : ''; }).filter(Boolean).join(' · ');
   return l.members && l.members.length ? l.members.join(' · ') : '';
 }
-function canEditEntries(){ return ['director', 'headClerk', 'clerk'].indexOf(UI.role) >= 0 && Sync.canWrite(); }
+function canEditEntries(){ return (clerkOn() ? ['director', 'headClerk', 'clerk'] : ['director']).indexOf(UI.role) >= 0 && Sync.canWrite(); }
 function entCount(e){ return (e.entries || []).reduce(function(n, s){ return n + s.lanes.length; }, 0); }
 function entButton(e, big){
   if (!canEditEntries()) return '';
@@ -3644,7 +3662,7 @@ function entButton(e, big){
   return '<button class="btn ' + (big ? 'primary' : 'sm') + '" data-entedit="' + e.id + '">' + (empty ? (relay ? 'Enter teams and legs' : 'Enter athletes') : relay ? 'Edit teams and legs' : 'Edit athletes') + '</button>';
 }
 function emptyHeatNote(e, who){
-  return '<div class="ent-empty"><b>No athletes entered yet.</b><span>' + (who === 'ump' ? 'The clerks add them at check-in once the field is known.' : 'Add them from the athletes already in the meet program' + (isRelayEv(e) ? ', with each team\'s runners in leg order.' : '.')) + '</span>' + (who === 'ump' ? '' : entButton(e, true)) + '</div>';
+  return '<div class="ent-empty"><b>No athletes entered yet.</b><span>' + (who === 'ump' ? (clerkOn() ? 'The clerks add them at check-in once the field is known.' : 'The meet director adds them on the Schedule once the field is known.') : 'Add them from the athletes already in the meet program' + (isRelayEv(e) ? ', with each team\'s runners in leg order.' : '.')) + '</span>' + (who === 'ump' ? '' : entButton(e, true)) + '</div>';
 }
 
 /* ---------- people already in the meet program ---------- */
@@ -4248,6 +4266,7 @@ function meChip(e, block){
   return '<div class="me-chip' + (block ? ' block' : '') + '"><span class="lane">' + esc(me.slice(1)) + '</span><span><small>Umpire ' + esc(me.slice(1)) + '</small><b>' + esc(name || 'Name not set') + '</b></span>' + posts + '</div>';
 }
 function clerkLine(d, e, s){
+  if (!clerkOn()) return '';
   var c = ciCounts(d, e, s), stg = slStaged(d, e, s);
   var t = '<div class="clerkline"><span class="cl-h">Clerking</span>' +
     '<span class="ci-pill in">' + c.in + ' of ' + c.n + ' checked in</span>' + (c.scr ? '<span class="ci-pill scr">' + c.scr + ' scratched</span>' : '') + (c.open ? '<span class="ci-pill">' + c.open + ' not checked in</span>' : '') +
@@ -4256,8 +4275,8 @@ function clerkLine(d, e, s){
 }
 function laneRows(d, e, s, lanes, canFlag){
   return lanes.map(function(l){
-    var cs = laneCalls(e.id, s.num, l.lane), st = ciState(d, e, l), x = st ? d.checkin[ciKey(e, l)] : null, stg = slStaged(d, e, s);
-    var tag = st === 'in' ? '<span class="ln-st in">' + (x.late ? 'Late check-in' : 'Checked in') + '</span>' : st === 'scr' ? '<span class="ln-st scr">Scratched · empty lane</span>' : '<span class="ln-st out">' + (stg ? 'Not at start' : 'Not checked in') + '</span>';
+    var cs = laneCalls(e.id, s.num, l.lane), st = clerkOn() ? ciState(d, e, l) : 'na', x = st ? d.checkin[ciKey(e, l)] : null, stg = slStaged(d, e, s);
+    var tag = st === 'na' ? '' : st === 'in' ? '<span class="ln-st in">' + (x.late ? 'Late check-in' : 'Checked in') + '</span>' : st === 'scr' ? '<span class="ln-st scr">Scratched · empty lane</span>' : '<span class="ln-st out">' + (stg ? 'Not at start' : 'Not checked in') + '</span>';
     return '<tr class="lr-' + (st || 'out') + '"><td><span class="lane">' + esc(l.lane) + '</span></td>' +
       '<td><div class="ath">' + esc(l.name || l.team) + '<small>' + esc([l.bib ? '#' + l.bib : '', l.team && l.team !== l.name ? l.team : ''].filter(Boolean).join(' · ')) + (isRelayLane(l) ? '<br>' + esc(legsText(l)) : '') + '</small>' + tag + '</div></td>' +
       '<td class="col-seed num muted">' + esc(l.seed || '') + '</td>' +
@@ -4272,7 +4291,7 @@ function renderHeats(main){
   var curE = mode === 'heat' && list.length ? list[heatIdx(list)].e : null;
   var top = '<div class="ci-top"><div class="seg" role="group" aria-label="Heats view"><button data-uvm="heat" aria-pressed="' + (mode === 'heat') + '">One heat</button><button data-uvm="all" aria-pressed="' + (mode === 'all') + '">All events</button></div>' + meChip(curE) +
     (mode === 'all' ? '<input class="f" type="search" id="uSearch" placeholder="Find event, athlete, team or bib" value="' + esc(S.q) + '" aria-label="Search heats" style="flex:1 1 220px">' : '') + '</div>';
-  var legend = '<div class="ci-legend"><span><i style="background:var(--ci-in)"></i>Checked in — competing</span><span><i style="background:var(--surface-2)"></i>Not checked in</span><span><i style="background:var(--ci-scr)"></i>Scratched — lane empty</span></div>';
+  var legend = !clerkOn() ? '' : '<div class="ci-legend"><span><i style="background:var(--ci-in)"></i>Checked in — competing</span><span><i style="background:var(--surface-2)"></i>Not checked in</span><span><i style="background:var(--ci-scr)"></i>Scratched — lane empty</span></div>';
   var b = banners() + (live() && !S.book && UI.role === 'referee' ? '<div class="banner">No rulebook chosen for this meet. Pick one under <b>Setup</b> so every call cites the right rule number.</div>' : '');
   if (!list.length){ main.innerHTML = b + '<div class="card empty"><b>No heats to umpire on ' + esc(d.name) + '.</b><br>' + (ciEvents(d).length ? 'Every event on this day is a field event or set to no umpires.' : 'Heats appear once the meet program with start lists is imported.') + '</div>'; return; }
   main.innerHTML = b + top + legend + (mode === 'heat' ? heatCard(d, list, canFlag) : allHeats(d, canFlag));
@@ -4308,11 +4327,11 @@ function allHeats(d, canFlag){
     out += '<section class="ci-ev' + (isOpen ? ' open' : '') + '"><button class="ci-evh" data-utog="' + e.id + '" aria-expanded="' + isOpen + '"><span class="chev" aria-hidden="true">▶</span>' +
       '<span class="ci-num">' + (e.num != null ? 'EVENT ' + esc(e.num) : '') + '<br><b class="num" style="color:var(--ink)">' + fmt(e.start) + '</b></span>' +
       '<span class="ci-name">' + esc(evTitle(e)) + '<small>' + [e.entries.length ? e.entries.length + (e.entries.length === 1 ? ' heat' : ' heats') : '<span style="color:var(--clay)">No athletes entered</span>', eventLayout(e) ? layoutName(eventLayout(e)) : ''].filter(Boolean).join(' · ') + '</small></span>' +
-      '<span class="ci-cnt">' + (finalOf(e.id) ? '<span class="upill s-final">Final</span>' : '') + (pend ? '<span class="upill s-ref">' + pend + ' pending</span>' : '') + (dq ? '<span class="upill s-dq">' + dq + ' DQ</span>' : '') + (pr ? '<span class="upill s-protest">Protest</span>' : '') + '<span class="ci-pill in">' + cc.in + '/' + cc.n + ' in</span></span></button>';
+      '<span class="ci-cnt">' + (finalOf(e.id) ? '<span class="upill s-final">Final</span>' : '') + (pend ? '<span class="upill s-ref">' + pend + ' pending</span>' : '') + (dq ? '<span class="upill s-dq">' + dq + ' DQ</span>' : '') + (pr ? '<span class="upill s-protest">Protest</span>' : '') + (clerkOn() ? '<span class="ci-pill in">' + cc.in + '/' + cc.n + ' in</span>' : '') + '</span></button>';
     if (isOpen && !e.entries.length) out += emptyHeatNote(e, 'ump');
     else if (isOpen) secs.forEach(function(s){
       var n = clearsFor(e.id, s.num).length, orig = e.entries.filter(function(x){ return x.num === s.num; })[0] || s;
-      out += '<div class="ci-sec"><span>' + esc(secName(s)) + (s.label ? ' · ' + esc(s.label) : '') + (n ? ' <span class="ok-count">✓ ' + n + ' done</span>' : '') + '</span><span class="ci-cnt" style="text-transform:none;letter-spacing:0">' + (slStaged(d, e, orig) ? '<span class="ci-pill staged">Staged</span>' : '') + ciPills(ciCounts(d, e, orig)) + '</span></div><div style="overflow-x:auto"><table class="lanes"><tbody>' + laneRows(d, e, orig, s.lanes, canFlag) + '</tbody></table></div>';
+      out += '<div class="ci-sec"><span>' + esc(secName(s)) + (s.label ? ' · ' + esc(s.label) : '') + (n ? ' <span class="ok-count">✓ ' + n + ' done</span>' : '') + '</span><span class="ci-cnt" style="text-transform:none;letter-spacing:0">' + (clerkOn() ? (slStaged(d, e, orig) ? '<span class="ci-pill staged">Staged</span>' : '') + ciPills(ciCounts(d, e, orig)) : '') + '</span></div><div style="overflow-x:auto"><table class="lanes"><tbody>' + laneRows(d, e, orig, s.lanes, canFlag) + '</tbody></table></div>';
     });
     out += '</section>';
   });
@@ -4340,7 +4359,7 @@ function openReport(evId, sn, lane){
   if (!l) return;
   var st = ciState(d, e, l), name = evTitle(e);
   openSheet('<div class="sh-top"><div><div class="muted mono-cap">' + (e.num != null ? 'EVENT ' + esc(e.num) + ' · ' : '') + esc(secName(s)).toUpperCase() + '</div><h2>Report foul · Lane ' + esc(l.lane) + '</h2></div><button class="x" data-close aria-label="Close">×</button></div>' +
-    '<dl class="kv">' + (isRelayLane(l) ? '<dt>Relay team</dt><dd>' + esc(relayName(l)) + '</dd>' : '<dt>Athlete</dt><dd>' + esc(l.name || l.team) + (l.bib ? ' · #' + esc(l.bib) : '') + '</dd><dt>Team</dt><dd>' + esc(l.team || '—') + '</dd>') + '<dt>Event</dt><dd>' + esc(name) + '</dd><dt>Clerking</dt><dd>' + (st === 'in' ? 'Checked in' : 'Not checked in — confirm the lane before submitting') + '</dd></dl>' +
+    '<dl class="kv">' + (isRelayLane(l) ? '<dt>Relay team</dt><dd>' + esc(relayName(l)) + '</dd>' : '<dt>Athlete</dt><dd>' + esc(l.name || l.team) + (l.bib ? ' · #' + esc(l.bib) : '') + '</dd><dt>Team</dt><dd>' + esc(l.team || '—') + '</dd>') + '<dt>Event</dt><dd>' + esc(name) + '</dd>' + (clerkOn() ? '<dt>Clerking</dt><dd>' + (st === 'in' ? 'Checked in' : 'Not checked in — confirm the lane before submitting') + '</dd>' : '') + '</dl>' +
     '<form id="rform" class="box" style="background:transparent;padding:0">' + runnerPick(l) +
     '<label class="lbl" for="r-rule">Rule</label><select class="f" id="r-rule" required>' + rules().map(function(r){ var ref = refFor(r, name); return '<option value="' + esc(r.id) + '">' + esc((ref ? ref + ' · ' : '') + r.title) + '</option>'; }).join('') + '</select>' +
     '<span class="hint">' + (S.book ? esc(bookName(S.book)) + ' rulebook' : 'The referee hasn\'t chosen a rulebook yet; rule numbers are added once they do.') + '</span>' +
@@ -4372,7 +4391,7 @@ function runnerPick(l){
   return '<div><div class="lbl" style="margin-top:6px">Runner who committed the foul</div><div class="chips runners" role="radiogroup" aria-label="Runner">' +
     opts.map(function(o, i){ return '<label><input type="radio" name="runner" id="rn-' + i + '" value="' + esc(o.v) + '"><span>' + o.h + '</span></label>'; }).join('') +
     '<label><input type="radio" name="runner" value="" checked><span>Whole team / not sure</span></label></div>' +
-    (g ? '' : '<span class="hint">Clerking hasn\'t entered the leg order for this team, so these are the names from the meet program.</span>') + '</div>';
+    (g ? '' : '<span class="hint">' + (clerkOn() ? 'Clerking hasn\'t' : 'No one has') + ' entered the leg order for this team, so these are the names from the meet program.</span>') + '</div>';
 }
 function writeCall(id, patch, action, note){
   var cur = S.calls.filter(function(c){ return c.id === id; })[0];
@@ -4392,7 +4411,7 @@ function openDetail(id){
     else if (r === 'referee' && c.status === 'reported') act = '<p class="muted" style="margin:0">Waiting for the chief umpire to review.</p>';
   }
   var f = findEv(c.evId), clerk = '';
-  if (f){ var s = f.e.entries.filter(function(x){ return x.num === c.sectionNum; })[0], l = s && s.lanes.filter(function(x){ return String(x.lane) === String(c.lane); })[0]; if (l) clerk = '<dt>Clerking</dt><dd>' + stChip(athState(f.d, f.e, s, l)) + '</dd>'; }
+  if (f){ var s = f.e.entries.filter(function(x){ return x.num === c.sectionNum; })[0], l = s && s.lanes.filter(function(x){ return String(x.lane) === String(c.lane); })[0]; if (l) clerk = '<dt>' + (clerkOn() ? 'Clerking' : 'Status') + '</dt><dd>' + stChip(athState(f.d, f.e, s, l)) + '</dd>'; }
   var H = (c.history || []).map(function(h){ return '<li><b>' + esc(h.action) + '</b> — ' + esc(nameOf(h.by)) + (h.role ? ' (' + esc(ROLE_NAMES[h.role] || h.role) + ')' : '') + ' <span class="when">' + tm(h.at) + '</span>' + (h.note ? '<div class="note">' + esc(h.note) + '</div>' : '') + '</li>'; }).join('');
   openSheet('<div class="sh-top"><div><div class="muted mono-cap">' + esc(evLabel(c)).toUpperCase() + ' · ' + esc(c.sectionLabel || '').toUpperCase() + ' · LANE ' + esc(c.lane) + '</div><h2>' + esc(c.athlete) + '</h2>' + (c.runner ? '<div class="runner-tag">' + (c.leg ? 'Leg ' + c.leg + ' · ' : '') + esc(c.runner) + '</div>' : '') + '</div><button class="x" data-close aria-label="Close">×</button></div>' +
     '<div>' + upill(c) + '</div>' +
@@ -4496,7 +4515,7 @@ function renderTiming(){
     var st = evState(e), calls = evCalls(e.id).sort(function(a, b){ return a.sectionNum - b.sectionNum || +a.lane - +b.lane; }), fin = S.finals[e.id], pend = evPending(e.id), dqs = calls.filter(function(c){ return c.status === 'dq'; });
     var cc = ciCounts(d, e), stg = e.entries.filter(function(s){ return slStaged(d, e, s); }).length;
     var chip = { final:'<span class="upill s-final">Final</span>', changed:'<span class="upill s-dq">Changed after final</span>', pending:'<span class="upill s-ref">' + pend.length + ' in progress</span>', ready:'<span class="upill s-reported">Ready to finalize</span>', open:'<span class="upill s-closed">No calls</span>' }[st];
-    out += '<section class="tevent st-' + st + '"><div class="tev-h"><span class="ci-num">' + (e.num != null ? 'EVENT ' + esc(e.num) : '') + '<br><b class="num" style="color:var(--ink)">' + fmt(e.start) + '</b></span><span class="ci-name grow">' + esc(evTitle(e)) + '<small>' + cc.in + ' checked in · ' + cc.scr + ' scratched · ' + stg + '/' + e.entries.length + ' heats staged</small></span>' + chip + '</div>';
+    out += '<section class="tevent st-' + st + '"><div class="tev-h"><span class="ci-num">' + (e.num != null ? 'EVENT ' + esc(e.num) : '') + '<br><b class="num" style="color:var(--ink)">' + fmt(e.start) + '</b></span><span class="ci-name grow">' + esc(evTitle(e)) + '<small>' + (clerkOn() ? cc.in + ' checked in · ' + cc.scr + ' scratched · ' + stg + '/' + e.entries.length + ' heats staged' : cc.n + ' entered · ' + e.entries.length + (e.entries.length === 1 ? ' heat' : ' heats')) + '</small></span>' + chip + '</div>';
     if (calls.length) out += '<div class="tcalls">' + calls.map(function(c){ return '<button class="tcall" data-uopen="' + c.id + '"><span class="lane">' + esc(c.lane) + '</span><span class="tc-body"><span class="tc-t">' + esc(c.athlete + runnerTxt(c)) + ' <span class="muted">· ' + esc(c.sectionLabel) + '</span></span><span class="tc-r">' + esc(ruleLabel(c)) + '</span>' + pipe(c) + '</span></button>'; }).join('') + '</div>';
     else { var n = S.clears.filter(function(c){ return c.evId === e.id; }).length; out += '<p class="tnone">No violations reported' + (n ? ' · ' + n + ' umpire OK' + (n > 1 ? 's' : '') + ' logged' : '') + '.</p>'; }
     var ch = changedAfterFinal(e.id);

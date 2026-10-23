@@ -66,6 +66,12 @@ In Firebase: **Authentication → Settings → Authorized domains → Add domain
 3. Use **Access** to give each official their QR code. Officials who scan one are signed in as a guest
    and land on their role; meet staff sign in with their own email account.
 
+## Meets that use another clerking method
+On **Setup → Meet**, the meet director can untick **Use clerking in this meet**. Check-in, the start line, call
+announcements and the clerking roles are then hidden; umpires see every entered athlete as competing, and
+Athlete Status follows each athlete from the race through review to the result. Shoe check stays available, with its
+officials named on the director's Setup page. Ticking the box again brings clerking back with nothing lost.
+
 ## Updating the app later
 Replace `index.html` in the repository (**Add file → Upload files**, same name) and commit.
 GitHub Pages republishes within a couple of minutes. If the rules change, paste the new
