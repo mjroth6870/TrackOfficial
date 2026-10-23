@@ -910,6 +910,24 @@ header.top.stack{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"l
 .sep-row .pfpick span{padding:8px 12px;font-size:15px;min-width:58px}
 .pfpick input:checked+span.pf-na{background:var(--surface);color:var(--ink);border-color:var(--ink)}
 
+/* World Athletics shoe checker pane */
+#certPane{display:none;flex-direction:column;background:var(--surface);z-index:15}
+.cert-h{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 12px;border-bottom:1px solid var(--line)}
+.cert-h b{font-size:15px}
+#certPane iframe{flex:1;width:100%;border:0;background:#fff;min-height:0}
+.cert-note{margin:0;padding:6px 12px;font-size:12px;color:var(--muted);border-top:1px solid var(--line)}
+.cert-toggle{margin-bottom:12px}
+@media (min-width:900px){
+  body.cert-on #certPane{display:flex;position:fixed;right:0;bottom:0;width:50vw;top:calc(var(--hdr,64px) + var(--tabsh,0px) + env(safe-area-inset-top,0px));border-left:1px solid var(--line)}
+  body.cert-on main#main{width:50vw;max-width:none;margin:0}
+  .cert-toggle,.cert-back{display:none}
+}
+@media (max-width:899px){
+  body.cert-full #certPane{display:flex;position:fixed;left:0;right:0;bottom:0;top:calc(var(--hdr,64px) + env(safe-area-inset-top,0px));z-index:25}
+  body.cert-full{overflow:hidden}
+}
+.cert-h a.btn{text-decoration:none;color:var(--ink)}
+
 </style>
 <script>
 /* Firebase backend for the hosted copy (GitHub Pages). Inside Claude the platform supplies shared data,
@@ -1886,6 +1904,7 @@ function setTabs(){
 function render(){
   document.body.classList.toggle('nomeet', !M);
   document.body.classList.toggle('noclerk', !clerkOn());
+  if (!M) certSync();
   if (M && !clerkOn() && ROLE_DEFS[UI.role] && ROLE_DEFS[UI.role].group === 'clerk' && UI.role !== 'lineClerk' && !$('#dlg .rolepick')){ setRole('', ''); setTimeout(function(){ roleDialog(false); toast('Clerking is turned off for this meet. Pick another role.'); }, 0); }
   document.body.setAttribute('data-group', rgroup() || 'none');
   if (!M){
@@ -1907,6 +1926,7 @@ function render(){
   updateRunPill(d, nowMin());
   sizeHeader();
   ({ ce:renderCE, live:renderLive, checkin:renderCheckin, startline:renderStartLine, status:renderStatus, shoes:renderShoes, shoelog:renderShoeLog, heats:Ump.renderHeats, inbox:Ump.renderInbox, calls:Ump.renderCalls, access:renderAccess, admin:Acct.renderAdmin, schedule:renderSchedule, maps:renderMaps, notes:renderNotes, setup:renderSetup, meets:renderMeets })[UI.view](main);
+  certSync();
 }
 
 /* ---------- Live ---------- */
@@ -3730,7 +3750,7 @@ function shoeResults(){
 function renderShoes(main){
   var any = M.days.some(function(d){ return ciEvents(d).length; });
   if (!any){ main.innerHTML = '<div class="card empty"><b>No athletes entered yet.</b><br>Athletes appear here once the meet program with start lists is imported under Setup.</div>'; return; }
-  main.innerHTML = welcomeBanner() + (Ump.live() ? '' : Ump.shareNote('Shoe photos are saved with the shared meet so the chief umpire and referee can see them.')) + '<div class="card pad shoe-top"><h2>Shoe check</h2><label class="lbl" for="shoeQ">Find an athlete</label><input class="f" type="search" id="shoeQ" placeholder="Name, school or bib" value="' + esc(UI.shoeQ || '') + '" autocomplete="off">' +
+  main.innerHTML = certToggle() + welcomeBanner() + (Ump.live() ? '' : Ump.shareNote('Shoe photos are saved with the shared meet so the chief umpire and referee can see them.')) + '<div class="card pad shoe-top"><h2>Shoe check</h2><label class="lbl" for="shoeQ">Find an athlete</label><input class="f" type="search" id="shoeQ" placeholder="Name, school or bib" value="' + esc(UI.shoeQ || '') + '" autocomplete="off">' +
     '<p class="hint">Searches every athlete entered in the meet, across all days. Shot put, discus, hammer, weight throw and super weight throw don\'t need a shoe check, so they\'re left out.' + (Ump.canPhoto() ? ' Use <b>Add shoe photo</b> to take a picture, label it and mark it pass or fail.' : '') + '</p></div>' + shoePhotoNote() + '<div id="shoeBody" style="margin-top:12px">' + shoeResults() + '</div>';
   var i = $('#shoeQ'); if (i && !UI.shoeQ) i.focus();
 }
@@ -4030,6 +4050,33 @@ function shoeKeepCard(){
     '<label class="row" style="gap:8px;margin:0 0 6px">Delete photos <select class="f" id="shoeKeep" style="width:auto">' + [[0, 'Never — keep until removed'], [1, '1 day after they\'re taken'], [3, '3 days after'], [7, '7 days after'], [14, '14 days after'], [30, '30 days after'], [90, '90 days after']].map(function(o){ return '<option value="' + o[0] + '"' + (o[0] === k ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></label>' +
     '<p class="hint" style="margin:0">Old photos are cleared to save space. Shot put, discus, hammer, weight throw and super weight throw aren\'t shoe-checked. ' + (window.__toStandalone ? 'Firebase deletes expired photos on its own once its TTL policy is set up (see the README); the app also clears them when officials open the meet.' : 'Expired photos are cleared the next time an official opens the meet.') + '</p></div>';
 }
+
+/* ---------- World Athletics certified-shoe checker beside Shoe Check ----------
+   The checker sits in its own pane outside the page body, so it keeps its search while the app redraws.
+   Tablets and computers show it on the right; phones switch between the two with a toggle. */
+var CERT_URL = 'https://certcheck.worldathletics.org/';
+function certPane(){
+  var p = document.getElementById('certPane'); if (p) return p;
+  p = document.createElement('aside'); p.id = 'certPane'; p.setAttribute('aria-label', 'World Athletics shoe checker');
+  p.innerHTML = '<div class="cert-h"><button class="btn sm cert-back" data-certmode="shoe">‹ Shoe check</button><b>World Athletics shoe checker</b><span class="grow"></span><a class="btn sm" href="' + CERT_URL + '" target="_blank" rel="noopener">Open in new tab ↗</a></div>' +
+    '<iframe src="about:blank" data-src="' + CERT_URL + '" title="World Athletics certified shoe checker"></iframe>' +
+    '<p class="cert-note">If the checker doesn\'t load, or its search doesn\'t respond inside the app, use <b>Open in new tab</b>.</p>';
+  document.body.appendChild(p); return p;
+}
+function certToggle(){ var m = UI.certMode || 'shoe'; return '<div class="seg cert-toggle" role="group" aria-label="Shoe check view"><button data-certmode="shoe" aria-pressed="' + (m === 'shoe') + '">Shoe check</button><button data-certmode="cert" aria-pressed="' + (m === 'cert') + '">WA shoe checker</button></div>'; }
+function certSync(){
+  var on = !!M && UI.view === 'shoes';
+  document.body.classList.toggle('cert-on', on);
+  document.body.classList.toggle('cert-full', on && UI.certMode === 'cert');
+  if (!on) return;
+  var p = certPane(), f = p.querySelector('iframe');
+  if (f.getAttribute('src') === 'about:blank') f.setAttribute('src', f.dataset.src);
+  var t = document.getElementById('tabs');
+  document.documentElement.style.setProperty('--tabsh', (t && getComputedStyle(t).position === 'sticky' ? t.offsetHeight : 0) + 'px');
+  $$('.cert-toggle [data-certmode]').forEach(function(b){ b.setAttribute('aria-pressed', String(b.dataset.certmode === (UI.certMode || 'shoe'))); });
+}
+document.addEventListener('click', function(e){ var b = e.target.closest && e.target.closest('[data-certmode]'); if (!b) return; UI.certMode = b.dataset.certmode; certSync(); window.scrollTo(0, 0); });
+window.addEventListener('resize', function(){ if (document.body.classList.contains('cert-on')) certSync(); });
 
 /* =====================================================================
    Accounts & admin — who is signed in, a directory of every account, and an
