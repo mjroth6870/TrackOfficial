@@ -928,6 +928,17 @@ header.top.stack{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"l
 }
 .cert-h a.btn{text-decoration:none;color:var(--ink)}
 
+/* one-step lane rule */
+.lmark{display:inline-block;margin-left:6px;padding:0 6px;border-radius:5px;background:#B7791F;color:#fff;font-size:12px;font-weight:900;letter-spacing:.3px;vertical-align:2px}
+.lmark.dq{background:var(--st-dq,#C23F37)}
+.upill.lpill{background:#FDF0D5;color:#7A4D00;border:1px solid #E9C46A}
+.lwarn{border-radius:10px;padding:10px 12px;background:#FDF0D5;color:#5A3A00;font-size:14px;margin:4px 0 8px}
+.lwarn.dq{background:#FBE3E1;color:#7A1C16}
+.stepbox{border-left:5px solid #B7791F}
+.stepbox.dq{border-left-color:var(--st-dq,#C23F37)}
+.steplist{margin:0;padding-left:20px;font-size:14px;line-height:1.5}
+.steplist li.cur{font-weight:600}
+
 </style>
 <script>
 /* Firebase backend for the hosted copy (GitHub Pages). Inside Claude the platform supplies shared data,
@@ -4489,8 +4500,52 @@ function ruleLabel(c){
   var ref = (r && S.book) ? refFor(r, c.eventName) : (c.ruleRef || '');
   return (ref ? ref + ' · ' : '') + ((r && r.title) || c.ruleTitle || '');
 }
+/* ---------- one-step lane rule ----------
+   WA TR 17.3.3 / 17.3.4 and USATF 163.5 (lane and curb infringements, not the break line): a first single
+   step is marked "L" and follows the athlete into later rounds of the same event. Two or more steps in
+   one round, or across the rounds combined, is a disqualification. */
+var STEP_RULES = { 'lane-bend':1, 'lane-straight':1, 'curb':1 };
+var ROUND_NAME = { P:'Prelims', F:'Final', SF:'Semi-final', Q:'Quarter-final', T:'Trials', TF:'Timed final' };
+function stepRuleOn(ruleId){ return !!STEP_RULES[ruleId] && (S.book === 'wa' || S.book === 'usatf'); }
+function nrm(x){ return String(x || '').toLowerCase().replace(/\s+/g, ' ').trim(); }
+function evBaseKey(e){ return nrm(e.gender) + '|' + nrm(e.name); }
+function roundName(e){ return ROUND_NAME[String(e.round || '').toUpperCase()] || e.round || ''; }
+var RD_WORD = /^(Finals?|Prelims?|Preliminaries|Semi-?finals?|Quarter-?finals?|Trials|Timed Finals?|Heats|Round \d+)$/i;
+function roundOf(e, s){ var lb = String((s && (s.label || s.round)) || '').trim(); return RD_WORD.test(lb) ? lb : roundName(e); }
+function athKeyOf(l){ return isRelayLane(l) ? 't:' + nrm(relayName(l)) : l.bib ? 'b:' + l.bib : 'a:' + nrm(l.name) + '|' + nrm(l.team); }
+function callKeys(c){
+  var f = c.evKey ? null : findEv(c.evId);
+  return { ev:c.evKey || (f ? evBaseKey(f.e) : ''), ath:c.athKey || (c.bib ? 'b:' + c.bib : 'a:' + nrm(c.athlete) + '|' + nrm(c.team)) };
+}
+/* Calls that count toward the tally: still open, or decided. Closed by the chief umpire and withdrawn calls don't. */
+function stepCounts(c){ return +c.steps > 0 && STEP_RULES[c.ruleId] && c.status !== 'closed' && c.status !== 'withdrawn' && !(c.status === 'no_dq' && c.protest && c.protest.result === 'upheld' && c.initialDecision === 'dq'); }
+function stepHistory(evKey, athKey){
+  if (!evKey) return { list:[], total:0 };
+  var list = S.calls.filter(function(c){ if (!stepCounts(c)) return false; var k = callKeys(c); return k.ev === evKey && k.ath === athKey; }).sort(function(a, b){ return (a.reportedAt || '').localeCompare(b.reportedAt || ''); });
+  return { list:list, total:list.reduce(function(n, c){ return n + (+c.steps >= 2 ? 2 : 1); }, 0) };
+}
+function stepHistFor(c){ var k = callKeys(c); return stepHistory(k.ev, k.ath); }
+/* Steps counted up to and including this call. */
+function stepsUpTo(c){ var h = stepHistFor(c), n = 0, hit = false; h.list.forEach(function(x){ if (hit) return; n += +x.steps >= 2 ? 2 : 1; if (x.id === c.id) hit = true; }); return hit ? n : 0; }
+function stepTag(c){
+  if (!+c.steps || !STEP_RULES[c.ruleId]) return '';
+  var n = stepsUpTo(c);
+  return n >= 2 ? ' <span class="upill s-dq">' + (+c.steps >= 2 ? '2+ steps' : '2nd step') + ' → DQ</span>' : n === 1 ? ' <span class="upill lpill">L · 1 step</span>' : '';
+}
+function laneL(e, l){
+  var h = stepHistory(evBaseKey(e), athKeyOf(l)); if (!h.total) return '';
+  var t = h.list.map(function(c){ return (c.round || '') + ' ' + (c.sectionLabel || '') + (c.location ? ', ' + c.location : ''); }).join('; ');
+  return '<span class="lmark' + (h.total >= 2 ? ' dq' : '') + '" title="' + esc((h.total >= 2 ? 'Two or more steps: ' : 'One step on record: ') + t) + '">' + (h.total >= 2 ? 'L×' + h.total : 'L') + '</span>';
+}
+function stepBox(c){
+  var h = stepHistFor(c); if (!h.list.length) return '';
+  var n = stepsUpTo(c), ref = S.book === 'usatf' ? 'USATF 163.5' : 'WA TR 17.3.3 / 17.3.4';
+  return '<div class="box stepbox' + (n >= 2 ? ' dq' : '') + '"><h3>' + (n >= 2 ? 'Two or more steps — disqualification' : 'One step — "L" on record') + '</h3>' +
+    '<p class="muted" style="margin:0 0 6px;font-size:14px">' + esc(ref) + ': one step is marked L and follows the athlete to later rounds of this event; two or more steps in one round, or in all rounds combined, is a DQ.</p>' +
+    '<ol class="steplist">' + h.list.map(function(x){ return '<li' + (x.id === c.id ? ' class="cur"' : '') + '><button class="linkbtn" data-uopen="' + x.id + '">' + esc([x.round, x.sectionLabel].filter(Boolean).join(' · ') || x.eventName) + '</button> — ' + (+x.steps >= 2 ? '2+ steps' : '1 step') + (x.location ? ' · ' + esc(x.location) : '') + ' · ' + esc(nameOf(x.reportedBy)) + (x.post ? ', ' + esc(x.post) : '') + ' · ' + tm(x.reportedAt) + ' · <span class="muted">' + esc(x.status === 'no_dq' && +x.steps === 1 ? 'L recorded' : (STATUS[x.status] || {}).label || x.status) + '</span>' + (x.id === c.id ? ' <b>(this call)</b>' : '') + '</li>'; }).join('') + '</ol></div>';
+}
 function upill(c){
-  var st = STATUS[c.status] || STATUS.reported, h = '<span class="upill ' + st.cls + '">' + st.label + '</span>';
+  var st = STATUS[c.status] || STATUS.reported, h = '<span class="upill ' + st.cls + '">' + (c.status === 'no_dq' && +c.steps === 1 && STEP_RULES[c.ruleId] ? 'L recorded · no DQ' : st.label) + '</span>';
   if (c.protest && c.protest.status === 'open') h += ' <span class="upill s-protest">Under protest</span>';
   else if (c.protest && c.protest.status === 'resolved') h += ' <span class="upill s-protest">Protest ' + (c.protest.result === 'upheld' ? 'upheld' : 'denied') + '</span>';
   return h;
@@ -4571,7 +4626,7 @@ function laneRows(d, e, s, lanes, canFlag){
     var cs = laneCalls(e.id, s.num, l.lane), st0 = ciState(d, e, l), st = ciTracked(e) ? st0 : (st0 === 'scr' || st0 === 'dns' ? st0 : 'na'), x = st ? d.checkin[ciKey(e, l)] : null, stg = slStaged(d, e, s);
     var tag = st === 'na' ? '' : st === 'dns' ? '<span class="ln-st scr">Did not start</span>' : st === 'in' ? '<span class="ln-st in">' + (x.late ? 'Late check-in' : 'Checked in') + '</span>' : st === 'scr' ? '<span class="ln-st scr">Scratched · empty lane</span>' : '<span class="ln-st out">' + (stg ? 'Not at start' : 'Not checked in') + '</span>';
     return '<tr class="lr-' + (st || 'out') + '"><td><span class="lane">' + esc(l.lane) + '</span></td>' +
-      '<td><div class="ath">' + esc(l.name || l.team) + '<small>' + esc([l.bib ? '#' + l.bib : '', l.team && l.team !== l.name ? l.team : ''].filter(Boolean).join(' · ')) + (isRelayLane(l) ? '<br>' + esc(legsText(l)) : '') + '</small>' + tag + '</div></td>' +
+      '<td><div class="ath">' + esc(l.name || l.team) + laneL(e, l) + '<small>' + esc([l.bib ? '#' + l.bib : '', l.team && l.team !== l.name ? l.team : ''].filter(Boolean).join(' · ')) + (isRelayLane(l) ? '<br>' + esc(legsText(l)) : '') + '</small>' + tag + '</div></td>' +
       '<td class="col-seed num muted">' + esc(l.seed || '') + '</td>' +
       '<td><span class="cell-chips">' + cs.map(function(c){ return '<button class="upill ' + (STATUS[c.status] || {}).cls + '" style="border:0;cursor:pointer" data-uopen="' + c.id + '" title="' + esc(ruleLabel(c)) + '">' + (c.protest && c.protest.status === 'open' ? 'Protest' : (STATUS[c.status] || {}).label) + '</button>'; }).join('') +
       (canFlag && st !== 'scr' && st !== 'dns' ? '<button class="flagbtn" data-uflag="' + e.id + '|' + s.num + '|' + esc(l.lane) + '" aria-label="Report a foul, lane ' + esc(l.lane) + '">' + FLAG + 'Flag</button>' : '') + '</span></td></tr>';
@@ -4654,22 +4709,28 @@ function openReport(evId, sn, lane){
   openSheet('<div class="sh-top"><div><div class="muted mono-cap">' + (e.num != null ? 'EVENT ' + esc(e.num) + ' · ' : '') + esc(secName(s)).toUpperCase() + '</div><h2>Report foul · Lane ' + esc(l.lane) + '</h2></div><button class="x" data-close aria-label="Close">×</button></div>' +
     '<dl class="kv">' + (isRelayLane(l) ? '<dt>Relay team</dt><dd>' + esc(relayName(l)) + '</dd>' : '<dt>Athlete</dt><dd>' + esc(l.name || l.team) + (l.bib ? ' · #' + esc(l.bib) : '') + '</dd><dt>Team</dt><dd>' + esc(l.team || '—') + '</dd>') + '<dt>Event</dt><dd>' + esc(name) + '</dd>' + (ciTracked(e) ? '<dt>' + (ceManaged(e) ? 'Check-in' : 'Clerking') + '</dt><dd>' + (st === 'in' ? 'Checked in' : 'Not checked in — confirm the lane before submitting') + '</dd>' : '') + '</dl>' +
     '<form id="rform" class="box" style="background:transparent;padding:0">' + runnerPick(l) +
+    (function(){ var h = stepHistory(evBaseKey(e), athKeyOf(l)); return h.total ? '<div class="lwarn' + (h.total >= 2 ? ' dq' : '') + '"><b>' + (h.total >= 2 ? 'Already ' + h.total + ' steps in this event' : 'Already has an L in this event') + '</b> — ' + h.list.map(function(c){ return esc([c.round, c.sectionLabel, c.location].filter(Boolean).join(', ')); }).join('; ') + '. ' + (h.total >= 2 ? '' : 'Another step on the line or curb means disqualification.') + '</div>' : ''; })() +
     '<label class="lbl" for="r-rule">Rule</label><select class="f" id="r-rule" required>' + rules().map(function(r){ var ref = refFor(r, name); return '<option value="' + esc(r.id) + '">' + esc((ref ? ref + ' · ' : '') + r.title) + '</option>'; }).join('') + '</select>' +
     '<span class="hint">' + (S.book ? esc(bookName(S.book)) + ' rulebook' : 'The referee hasn\'t chosen a rulebook yet; rule numbers are added once they do.') + '</span>' +
+    '<div id="r-steps" hidden><div class="lbl" style="margin-top:6px">Steps on or over the line</div><div class="chips" role="radiogroup" aria-label="Steps"><label><input type="radio" name="steps" value="1"><span>1 step — L</span></label><label><input type="radio" name="steps" value="2"><span>2 or more steps — DQ</span></label></div></div>' +
     '<div><div class="lbl" style="margin-top:6px">Where on the track</div><div class="chips" role="radiogroup">' + LOCS.map(function(x, i){ return '<label><input type="radio" name="loc" id="loc-' + i + '" value="' + x + '"><span>' + x + '</span></label>'; }).join('') + '</div></div>' +
     '<label class="lbl" for="r-notes">What you saw</label><textarea class="f" id="r-notes" placeholder="e.g. Left foot on lane line 5 for 3 steps, coming off Turn 2"></textarea>' +
     '<label class="lbl" for="r-post">Your post</label><input class="f" id="r-post" placeholder="e.g. Umpire 3 – Turn 2" value="' + esc(postFor(e)) + '">' +
     '<div class="err" id="r-err" hidden></div>' +
     '<div class="actions"><button type="button" class="btn" data-close>Cancel</button><button class="btn flag" type="submit">' + FLAG + ' Submit to chief umpire</button></div></form>');
+  var stepsUi = function(){ var on = stepRuleOn($('#r-rule').value); $('#r-steps').hidden = !on; };
+  $('#r-rule').addEventListener('change', stepsUi); stepsUi();
   $('#rform').addEventListener('submit', function(ev){
     ev.preventDefault();
     var btn = $('#rform button[type=submit]'); btn.disabled = true;
     var r = rules().filter(function(x){ return x.id === $('#r-rule').value; })[0] || {}, loc = ($('input[name=loc]:checked') || {}).value || '';
     var notes = $('#r-notes').value.trim(), post = $('#r-post').value.trim(), rv = (($('input[name=runner]:checked') || {}).value || '').split('|'), leg = +rv[0] || null, runner = rv[1] || '';
     if (!myUmp()) lsSet('to.post', post);
+    var steps = stepRuleOn(r.id) ? +(($('input[name=steps]:checked') || {}).value || 0) : 0;
+    if (stepRuleOn(r.id) && !steps){ $('#r-err').hidden = false; $('#r-err').textContent = 'Say whether it was one step (L) or two or more steps.'; btn.disabled = false; return; }
     if (r.id === 'other' && !notes){ $('#r-err').hidden = false; $('#r-err').textContent = 'Describe the infraction in “What you saw” when the rule is Other.'; btn.disabled = false; return; }
     var now = new Date().toISOString();
-    db.collection(P('calls')).add({ dayId:d.id, evId:e.id, eventNum:e.num == null ? null : e.num, eventName:name, sectionNum:s.num, sectionLabel:secName(s), lane:String(l.lane), bib:l.bib || '', athlete:isRelayLane(l) ? relayName(l) : l.name || l.team || '', team:isRelayLane(l) ? relaySchool(l) : l.team || '', leg:leg, runner:runner, ciKey:ciKey(e, l),
+    db.collection(P('calls')).add({ dayId:d.id, evId:e.id, eventNum:e.num == null ? null : e.num, eventName:name, sectionNum:s.num, sectionLabel:secName(s), lane:String(l.lane), bib:l.bib || '', athlete:isRelayLane(l) ? relayName(l) : l.name || l.team || '', team:isRelayLane(l) ? relaySchool(l) : l.team || '', leg:leg, runner:runner, steps:steps || null, evKey:evBaseKey(e), athKey:athKeyOf(l), round:roundOf(e, s), ciKey:ciKey(e, l),
       ruleId:r.id || '', ruleRef:refFor(r, name), ruleBook:S.book || '', ruleTitle:r.title || '', umpireNum:myUmp() ? +myUmp().slice(1) : null, layout:eventLayout(e) || '', location:loc, notes:notes, post:post,
       reportedBy:meId, reportedAt:now, status:'reported', protest:null, updatedAt:now, updatedBy:meId, history:[{ at:now, by:meId, role:UI.role, action:'Reported', note:notes }] }).then(function(){
       closeSheet(); toast('Sent to chief umpire: ' + name + ' ' + secName(s) + ', lane ' + l.lane + (runner ? ' (' + (leg ? 'leg ' + leg + ', ' : '') + runner + ')' : ''));
@@ -4696,8 +4757,8 @@ function openDetail(id){
   var r = UI.role, p = c.protest, act = '';
   var noteBox = function(ph){ return '<label class="lbl" for="d-note">Note</label><textarea class="f" id="d-note" placeholder="' + esc(ph) + '"></textarea>'; };
   if (cw()){
-    if ((r === 'chief' || r === 'assistant') && c.status === 'reported') act = '<div class="box"><h3>Chief umpire review</h3>' + noteBox('Confirmed with Umpire 4 at the 200m start; clear infraction.') + '<div class="actions"><button class="btn" data-act="closed">No further action</button><button class="btn primary" data-act="referee">Send to referee</button></div></div>';
-    else if (r === 'referee' && c.status === 'referee') act = '<div class="box"><h3>Referee decision</h3>' + noteBox('Reason for the decision') + '<div class="actions"><button class="btn good" data-act="no_dq">No disqualification</button><button class="btn danger" data-act="dq">Disqualify</button></div></div>';
+    if ((r === 'chief' || r === 'assistant') && c.status === 'reported') act = '<div class="box"><h3>Chief umpire review</h3>' + noteBox('Confirmed with Umpire 4 at the 200m start; clear infraction.') + '<div class="actions"><button class="btn" data-act="closed">No further action</button>' + (+c.steps && STEP_RULES[c.ruleId] && stepsUpTo(c) === 1 ? '<button class="btn good" data-act="lmark">Record L – no DQ</button>' : '') + '<button class="btn primary" data-act="referee">Send to referee</button></div></div>';
+    else if (r === 'referee' && c.status === 'referee') act = '<div class="box"><h3>Referee decision</h3>' + noteBox('Reason for the decision') + '<div class="actions"><button class="btn good" data-act="no_dq">' + (+c.steps && STEP_RULES[c.ruleId] && stepsUpTo(c) === 1 ? 'Record L – no DQ' : 'No disqualification') + '</button><button class="btn danger" data-act="dq">Disqualify' + (stepsUpTo(c) >= 2 ? ' (2+ steps)' : '') + '</button></div></div>';
     else if (r === 'referee' && p && p.status === 'open') act = '<div class="box"><h3>Rule on the protest</h3><p class="muted" style="margin:0;font-size:14px">Current decision: <b>' + esc(STATUS[c.status].label) + '</b>. Upholding the protest reverses it.</p>' + noteBox('Video review / jury notes') + '<div class="actions"><button class="btn" data-act="deny">Deny – decision stands</button><button class="btn purple" data-act="uphold">Uphold – reverse to ' + (c.status === 'dq' ? 'not disqualified' : 'disqualified') + '</button></div></div>';
     else if (r === 'referee' && (c.status === 'dq' || c.status === 'no_dq') && !p) act = '<div class="box"><h3>Record a protest</h3>' + noteBox('Who filed it, when, and the grounds') + '<div class="actions"><button class="btn purple" data-act="protest">Place under protest</button></div></div>';
     else if (r === 'umpire' && c.status === 'reported' && c.reportedBy === meId) act = '<div class="actions"><button class="btn" data-act="withdrawn">Withdraw my call</button></div>';
@@ -4707,12 +4768,12 @@ function openDetail(id){
   if (f){ var s = f.e.entries.filter(function(x){ return x.num === c.sectionNum; })[0], l = s && s.lanes.filter(function(x){ return String(x.lane) === String(c.lane); })[0]; if (l) clerk = '<dt>' + (ciTracked(f.e) ? (ceManaged(f.e) ? 'Check-in' : 'Clerking') : 'Status') + '</dt><dd>' + stChip(athState(f.d, f.e, s, l)) + '</dd>'; }
   var H = (c.history || []).map(function(h){ return '<li><b>' + esc(h.action) + '</b> — ' + esc(nameOf(h.by)) + (h.role ? ' (' + esc(ROLE_NAMES[h.role] || h.role) + ')' : '') + ' <span class="when">' + tm(h.at) + '</span>' + (h.note ? '<div class="note">' + esc(h.note) + '</div>' : '') + '</li>'; }).join('');
   openSheet('<div class="sh-top"><div><div class="muted mono-cap">' + esc(evLabel(c)).toUpperCase() + ' · ' + esc(c.sectionLabel || '').toUpperCase() + ' · LANE ' + esc(c.lane) + '</div><h2>' + esc(c.athlete) + '</h2>' + (c.runner ? '<div class="runner-tag">' + (c.leg ? 'Leg ' + c.leg + ' · ' : '') + esc(c.runner) + '</div>' : '') + '</div><button class="x" data-close aria-label="Close">×</button></div>' +
-    '<div>' + upill(c) + '</div>' +
+    '<div>' + upill(c) + stepTag(c) + '</div>' + stepBox(c) +
     '<dl class="kv"><dt>Event</dt><dd>' + esc(c.eventName) + '</dd>' + (c.runner ? '<dt>Runner</dt><dd>' + (c.leg ? 'Leg ' + c.leg + ' · ' : '') + esc(c.runner) + '</dd>' : '') + '<dt>Team</dt><dd>' + esc(c.team || '—') + (c.bib ? ' · #' + esc(c.bib) : '') + '</dd><dt>Rule</dt><dd>' + esc(ruleLabel(c)) + '</dd>' + (c.location ? '<dt>Location</dt><dd>' + esc(c.location) + '</dd>' : '') + '<dt>Umpire</dt><dd>' + esc(nameOf(c.reportedBy)) + (c.post ? ', ' + esc(c.post) : '') + '</dd>' + clerk + '</dl>' +
     act + '<div class="err" id="d-err" hidden></div><div><h3 class="section-title" style="font-size:15px;margin-bottom:8px">History</h3><ul class="timeline">' + H + '</ul></div>');
   $$('#sheetRoot [data-act]').forEach(function(b){ b.addEventListener('click', function(){
     var a = b.dataset.act, note = (($('#d-note') || {}).value || '').trim(), cur = S.calls.filter(function(x){ return x.id === id; })[0];
-    var stale = (a === 'closed' || a === 'referee') ? cur.status !== 'reported' : (a === 'dq' || a === 'no_dq') ? cur.status !== 'referee' : (a === 'uphold' || a === 'deny') ? !(cur.protest && cur.protest.status === 'open') : a === 'protest' ? !!cur.protest : a === 'withdrawn' ? cur.status !== 'reported' : false;
+    var stale = (a === 'closed' || a === 'referee' || a === 'lmark') ? cur.status !== 'reported' : (a === 'dq' || a === 'no_dq') ? cur.status !== 'referee' : (a === 'uphold' || a === 'deny') ? !(cur.protest && cur.protest.status === 'open') : a === 'protest' ? !!cur.protest : a === 'withdrawn' ? cur.status !== 'reported' : false;
     var er = $('#d-err');
     if (stale){ er.hidden = false; er.textContent = 'Another official already updated this call. Close and reopen it to see the latest.'; return; }
     if (a === 'protest' && !note){ er.hidden = false; er.textContent = 'Add a note on who filed the protest and the grounds.'; return; }
@@ -4720,6 +4781,7 @@ function openDetail(id){
     var now = new Date().toISOString(), pr;
     if (a === 'referee') pr = writeCall(id, { status:'referee' }, 'Sent to referee', note);
     else if (a === 'closed') pr = writeCall(id, { status:'closed' }, 'Closed by chief umpire – no further action', note);
+    else if (a === 'lmark') pr = writeCall(id, { status:'no_dq', initialDecision:'no_dq', lmark:true }, 'L recorded – one step, no DQ', note);
     else if (a === 'dq') pr = writeCall(id, { status:'dq', initialDecision:'dq' }, 'Disqualified', note);
     else if (a === 'no_dq') pr = writeCall(id, { status:'no_dq', initialDecision:'no_dq' }, 'Not disqualified', note);
     else if (a === 'withdrawn') pr = writeCall(id, { status:'withdrawn' }, 'Withdrawn by umpire', note);
@@ -4740,7 +4802,7 @@ function inboxItems(){
 function badge(){ if (!live()) return 0; if (UI.role === 'timing') return timingBadge(); if (UI.role === 'umpire') return 0; return inboxItems().length; }
 function dayTag(c){ var d = activeDay(); if (!c.dayId || (d && d.id === c.dayId)) return ''; var x = day(c.dayId); return x ? ' · ' + esc(x.name) : ''; }
 function qcard(c){
-  return '<button class="qcard" data-uopen="' + c.id + '"><span class="lane">' + esc(c.lane) + '</span><span class="t">' + esc(evLabel(c)) + ' <span class="muted num">' + esc(c.sectionLabel) + dayTag(c) + '</span></span><span>' + upill(c) + '</span>' +
+  return '<button class="qcard" data-uopen="' + c.id + '"><span class="lane">' + esc(c.lane) + '</span><span class="t">' + esc(evLabel(c)) + ' <span class="muted num">' + esc(c.sectionLabel) + dayTag(c) + '</span></span><span>' + upill(c) + stepTag(c) + '</span>' +
     '<span class="d">' + esc(c.athlete + runnerTxt(c)) + (c.team && String(c.athlete).indexOf(c.team) !== 0 ? ' (' + esc(c.team) + ')' : '') + ' — ' + esc(ruleLabel(c)) + (c.location ? ' · ' + esc(c.location) : '') + ' · ' + esc(nameOf(c.reportedBy)) + (c.post ? ', ' + esc(c.post) : '') + ' · ' + tm(c.reportedAt) + '</span></button>';
 }
 function byNew(a, b){ return (b.updatedAt || b.reportedAt || '').localeCompare(a.updatedAt || a.reportedAt || ''); }
@@ -4810,6 +4872,11 @@ function renderTiming(){
     var chip = { final:'<span class="upill s-final">Final</span>', changed:'<span class="upill s-dq">Changed after final</span>', pending:'<span class="upill s-ref">' + pend.length + ' in progress</span>', ready:'<span class="upill s-reported">Ready to finalize</span>', open:'<span class="upill s-closed">No calls</span>' }[st];
     out += '<section class="tevent st-' + st + '"><div class="tev-h"><span class="ci-num">' + (e.num != null ? 'EVENT ' + esc(e.num) : '') + '<br><b class="num" style="color:var(--ink)">' + fmt(e.start) + '</b></span><span class="ci-name grow">' + esc(evTitle(e)) + '<small>' + (ciTracked(e) ? cc.in + ' checked in · ' + cc.scr + ' scratched · ' + stg + '/' + units(e, e.entries.length) + ' staged' : cc.n + ' entered · ' + units(e, e.entries.length)) + '</small></span>' + chip + '</div>';
     var outs = []; (e.entries || []).forEach(function(s2){ s2.lanes.forEach(function(l2){ var a2 = athState(d, e, s2, l2); if (a2.code === 'scr' || a2.code === 'dns') outs.push({ s:s2, l:l2, c:a2.code }); }); });
+    /* Lane marks: steps called in this round, and an L carried in from an earlier round of the same event. */
+    var lm = [];
+    S.calls.filter(function(c){ return c.evId === e.id && stepCounts(c); }).forEach(function(c){ var n = stepsUpTo(c); lm.push('<span>' + (e.entries.length > 1 ? esc(c.sectionLabel) + ', ' : '') + 'lane ' + esc(c.lane) + ' ' + esc(c.athlete) + ' · <b>' + (n >= 2 ? 'DQ — ' + (+c.steps >= 2 ? '2+ steps' : '2nd step') : 'L') + '</b></span>'); });
+    (e.entries || []).forEach(function(s3){ s3.lanes.forEach(function(l3){ var h3 = stepHistory(evBaseKey(e), athKeyOf(l3)), prior = h3.list.filter(function(c){ return c.evId !== e.id; }); if (prior.length) lm.push('<span>lane ' + esc(l3.lane) + ' ' + esc(l3.name || l3.team) + ' · <b>L</b> in ' + esc(prior.map(function(c){ return c.round || c.eventName; }).join(', ')) + '</span>'); }); });
+    if (lm.length) out += '<div class="touts"><b>Lane marks</b> ' + lm.join('') + '</div>';
     if (outs.length) out += '<div class="touts"><b>Not competing</b> ' + outs.map(function(o){ return '<span>' + (e.entries.length > 1 ? esc(secName(o.s)) + ', ' : '') + 'lane ' + esc(o.l.lane) + ' ' + esc(o.l.name || o.l.team) + ' · <b>' + (o.c === 'dns' ? 'DNS' : 'Scratched') + '</b></span>'; }).join('') + '</div>';
     if (calls.length) out += '<div class="tcalls">' + calls.map(function(c){ return '<button class="tcall" data-uopen="' + c.id + '"><span class="lane">' + esc(c.lane) + '</span><span class="tc-body"><span class="tc-t">' + esc(c.athlete + runnerTxt(c)) + ' <span class="muted">· ' + esc(c.sectionLabel) + '</span></span><span class="tc-r">' + esc(ruleLabel(c)) + '</span>' + pipe(c) + '</span></button>'; }).join('') + '</div>';
     else { var n = S.clears.filter(function(c){ return c.evId === e.id; }).length; out += '<p class="tnone">No violations reported' + (n ? ' · ' + n + ' umpire OK' + (n > 1 ? 's' : '') + ' logged' : '') + '.</p>'; }
