@@ -929,6 +929,8 @@ header.top.stack{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"l
 .cert-h a.btn{text-decoration:none;color:var(--ink)}
 
 /* one-step lane rule */
+
+.appcopy{text-align:center;font-size:12px;color:#8A8F98;padding:18px 16px calc(18px + env(safe-area-inset-bottom,0px));line-height:1.4}
 .lmark{display:inline-block;margin-left:6px;padding:0 6px;border-radius:5px;background:#B7791F;color:#fff;font-size:12px;font-weight:900;letter-spacing:.3px;vertical-align:2px}
 .lmark.dq{background:var(--st-dq,#C23F37)}
 .upill.lpill{background:#FDF0D5;color:#7A4D00;border:1px solid #E9C46A}
@@ -1113,7 +1115,7 @@ header.top.stack{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"l
       '<div class="gate-err" id="gErr" role="alert" hidden></div>' +
       '<div class="gate-acts"><button class="btn primary" id="gIn">Sign in</button><button class="btn" id="gUp">Create account</button></div>' +
       '<div class="gate-acts"><button class="linkbtn" id="gLink">Email me a sign-in link instead</button><button class="linkbtn" id="gReset">Forgot password</button></div>' +
-      '<p class="hint" id="gNote"></p></div>';
+      '<p class="hint" id="gNote"></p><p class="hint" style="text-align:center;margin-top:14px">© 2026 Michael J. Roth. All rights reserved.</p></div>';
     document.body.appendChild(gateEl);
     var box = gateEl, q = function(s){ return box.querySelector(s); }, em = function(){ return q('#gEmail').value.trim(); }, pw = function(){ return q('#gPw').value; };
     var err = function(m){ var e = q('#gErr'); e.hidden = !m; e.textContent = m || ''; };
@@ -1160,6 +1162,8 @@ header.top.stack{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"l
 </header>
 <nav class="tabs" role="tablist" id="tabs"></nav>
 <main id="main"></main>
+<footer class="appcopy">© 2026 Michael J. Roth. All rights reserved.</footer>
+
 <div id="dlg"></div>
 <div id="layer"></div>
 <div id="sheetRoot"></div>
