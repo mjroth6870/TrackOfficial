@@ -941,6 +941,23 @@ header.top.stack{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"l
 .steplist{margin:0;padding-left:20px;font-size:14px;line-height:1.5}
 .steplist li.cur{font-weight:600}
 
+/* support mode & troubleshooting */
+.supbar{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between;background:#FFF1DC;border:1px solid #F0B45A;border-left:6px solid #E08A00;border-radius:10px;padding:10px 12px;margin:0 0 12px;font-size:14px;color:#3D2A00}
+.supbar .sup-txt{flex:1 1 260px;min-width:0}
+.supbar .sup-acts{display:flex;flex-wrap:wrap;gap:6px}
+body.supportmode header.top{box-shadow:inset 0 -4px 0 #E08A00}
+.chklist{display:flex;flex-direction:column;gap:6px;margin:4px 0 6px}
+.chk-row{display:flex;gap:10px;align-items:flex-start;font-size:14px}
+.chk-row>div{display:flex;flex-direction:column;min-width:0}
+.chk-row .muted{font-size:13px}
+.chk-ic{flex:0 0 22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:#fff;background:#2E7D4F}
+.chk-row.warn .chk-ic{background:#C77700}
+.chk-row.info .chk-ic{background:#7A8494;font-style:italic;font-family:Georgia,serif}
+.sup-tools{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0}
+.banner.notice-msg{background:#E8F1FB;border-left:5px solid #2F6FB3}
+.card.foreign{margin-bottom:16px;border:1px dashed var(--line)}
+.modal{max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);overflow:auto;-webkit-overflow-scrolling:touch}
+
 </style>
 <script>
 /* Firebase backend for the hosted copy (GitHub Pages). Inside Claude the platform supplies shared data,
@@ -1044,7 +1061,7 @@ header.top.stack{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"l
   var userApi = {
     id:function(){ return signedIn().then(function(a){ return a.auth.currentUser ? a.auth.currentUser.uid : null; }); },
     can:function(){ return Promise.resolve(true); },
-    me:function(){ return signedIn().then(function(a){ var u = a.auth.currentUser; return { id:u.uid, name:displayName(u), email:u.email || null, isAnonymous:!!u.isAnonymous, isOwner:false, canEdit:false }; }); },
+    me:function(){ return signedIn().then(function(a){ var u = a.auth.currentUser; return { id:u.uid, name:displayName(u), email:u.email || null, isAnonymous:!!u.isAnonymous, isOwner:false, canEdit:false, signin:u.isAnonymous ? 'anonymous' : ((u.providerData || [])[0] || {}).providerId || '', verified:!!u.emailVerified }; }); },
     profiles:function(ids){
       return signedIn().then(function(a){ return Promise.all(ids.map(function(id){ return a.sdk.fs.getDoc(a.sdk.fs.doc(a.fs, 'people/' + id)).then(function(s){ return [id, s.exists() ? s.data() : null]; }, function(){ return [id, null]; }); })); })
         .then(function(rows){ var o = {}; rows.forEach(function(r){ o[r[0]] = { id:r[0], name:(r[1] && r[1].name) || '' }; }); return o; });
@@ -1128,6 +1145,7 @@ header.top.stack{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"l
     q('#gPw').addEventListener('keydown', function(e){ if (e.key === 'Enter') q('#gIn').click(); });
     setTimeout(function(){ q('#gEmail').focus(); }, 50);
   }
+  window.__toResetEmail = function(email){ return load().then(function(a){ return a.sdk.auth.sendPasswordResetEmail(a.auth, email); }); };
   window.__toSignOut = function(){ load().then(function(a){ return a.sdk.auth.signOut(a.auth); }).then(function(){ try{ localStorage.removeItem('to.joined'); }catch(e){} location.hash = ''; location.reload(); }); };
   /* Account line for the Meets tab, and signing out. */
   window.__toAuthBar = function(){
@@ -1665,7 +1683,7 @@ var saveTimer = null;
 function libEntry(m){
   var e = LIB.meets.filter(function(x){ return x.id === m.id; })[0];
   if (!e){ e = { id:m.id, created:Date.now(), archived:false }; LIB.meets.push(e); }
-  e.name = m.name || 'Untitled meet'; e.updated = Date.now(); e.days = m.days.length;
+  e.name = m.name || 'Untitled meet'; e.updated = Date.now(); e.days = m.days.length; if (m.owner) e.owner = m.owner;
   e.events = m.days.reduce(function(n, d){ return n + d.events.length; }, 0);
   e.dates = m.days.map(function(d){ return d.date; }).filter(Boolean).sort();
   return e;
@@ -1922,7 +1940,9 @@ function render(){
   if (!M) certSync();
   if (M && !clerkOn() && ROLE_DEFS[UI.role] && ROLE_DEFS[UI.role].group === 'clerk' && UI.role !== 'lineClerk' && !$('#dlg .rolepick')){ setRole('', ''); setTimeout(function(){ roleDialog(false); toast('Clerking is turned off for this meet. Pick another role.'); }, 0); }
   document.body.setAttribute('data-group', rgroup() || 'none');
+  Acct.touch();
   if (!M){
+    document.body.classList.remove('supportmode');
     if (UI.view === 'admin' && Acct.isAdmin()){ setTabs(); $('#meetName').textContent = 'Admin'; $('#dayLabel').textContent = 'Accounts and meets'; Acct.renderAdmin($('#main')); return; }
     UI.view = 'meets'; setTabs();
     $('#meetName').textContent = 'No meet open'; $('#dayLabel').textContent = 'Open or create one on Meets'; document.title = 'Track Officials';
@@ -1941,6 +1961,7 @@ function render(){
   updateRunPill(d, nowMin());
   sizeHeader();
   ({ ce:renderCE, live:renderLive, checkin:renderCheckin, startline:renderStartLine, status:renderStatus, shoes:renderShoes, shoelog:renderShoeLog, heats:Ump.renderHeats, inbox:Ump.renderInbox, calls:Ump.renderCalls, access:renderAccess, admin:Acct.renderAdmin, schedule:renderSchedule, maps:renderMaps, notes:renderNotes, setup:renderSetup, meets:renderMeets })[UI.view](main);
+  var sb = Acct.supportBar(); if (sb) main.insertAdjacentHTML('afterbegin', sb);
   certSync();
 }
 
@@ -2683,8 +2704,9 @@ var Sync = (function(){
 /* ---------- Meets library ---------- */
 function fmtDates(ds){ if (!ds || !ds.length) return 'No dates set'; var f = function(x){ var p = x.split('-'); return new Date(+p[0], +p[1]-1, +p[2]).toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'}); }; return ds.length === 1 || ds[0] === ds[ds.length-1] ? f(ds[0]) : f(ds[0]) + ' – ' + f(ds[ds.length-1]); }
 function renderMeets(main){
-  var act = LIB.meets.filter(function(m){ return !m.archived; }).sort(function(a,b){ return b.updated - a.updated; });
-  var arc = LIB.meets.filter(function(m){ return m.archived; }).sort(function(a,b){ return b.updated - a.updated; });
+  var others = Acct.foreignMeets();
+  var act = LIB.meets.filter(function(m){ return !m.archived && others.indexOf(m) < 0; }).sort(function(a,b){ return b.updated - a.updated; });
+  var arc = LIB.meets.filter(function(m){ return m.archived && others.indexOf(m) < 0; }).sort(function(a,b){ return b.updated - a.updated; });
   function card(m){
     var cur = M && M.id === m.id;
     return '<div class="card meet' + (cur ? ' current' : '') + (m.archived ? ' archived' : '') + '" data-meet="' + m.id + '"><h3>' + esc(m.name) + (cur ? '<span class="tag">Open</span>' : '') + (m.shared ? '<span class="tag live">Shared</span>' : '') + (m.archived ? '<span class="tag arch">Archived</span>' : '') + '</h3>' +
@@ -2698,7 +2720,7 @@ function renderMeets(main){
   main.innerHTML = Acct.cardHtml() + '<div class="row" style="margin-bottom:6px"><h2 class="grow" style="margin:0">Meets</h2>' +
       '<button class="btn primary" id="mNew"' + nd + '>+ New meet</button><button class="btn" id="mNewP"' + nd + '>New from meet program</button><button class="btn" id="mImpJ"' + nd + '>Import backup</button></div>' +
     '<p class="hint" style="margin:0 0 14px">' + (Sync.available() ? 'Meets you share live belong to your account and open on any device you sign in on. Officials reach a meet through their access codes. ' : 'Every meet is stored on this device. ') + 'Copy last year\'s meet to start a new one with the same schedule, officials and maps. Archive finished meets to keep the list tidy — restore them any time.</p>' +
-    Sync.meetsPanel() +
+    Acct.noticeHtml() + Acct.foreignHtml(others) + Sync.meetsPanel() +
     (act.length ? '<div class="meetgrid">' + act.map(card).join('') + '</div>' : '<div class="card empty">No active meets. Create one, or restore an archived meet.</div>') +
     '<h2 style="margin:26px 0 10px">Archived <span class="muted" style="font-weight:600;font-size:14px">(' + arc.length + ')</span></h2>' +
     (arc.length ? '<div class="meetgrid">' + arc.map(card).join('') + '</div>' : '<p class="muted">Nothing archived yet.</p>');
@@ -4104,6 +4126,12 @@ var Acct = (function(){
   var db = null, user = null, me = { id:null, name:'', email:null, anon:false, rawName:'' };
   var isAdmin = false, suspended = false, ready = false, subs = [], adminSubs = [];
   var A = { accounts:null, admins:null, meets:null, sel:null, log:null, q:'' };
+  var APP_BUILD = '2026-10-25 18:20', profile = {};
+  /* Support session: an admin working inside another account's meet. Kept per browser tab, and the
+     meet's local copy is removed from the admin's device when the session ends. */
+  var SUP = (function(){ try{ return JSON.parse(sessionStorage.getItem('to.support') || 'null'); }catch(e){ return null; } })();
+  function saveSup(){ try{ if (SUP) sessionStorage.setItem('to.support', JSON.stringify(SUP)); else sessionStorage.removeItem('to.support'); }catch(e){} }
+  function who(){ return me.name || me.email || 'an admin'; }
   function standalone(){ return !!window.__toStandalone; }
   function nowIso(){ return new Date().toISOString(); }
   function fdate(iso){ if (!iso) return ''; try{ return new Date(iso).toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' }); }catch(e){ return ''; } }
@@ -4117,20 +4145,54 @@ var Acct = (function(){
       me.id = id;
       return user.me ? user.me().catch(function(){ return {}; }) : {};
     }).then(function(p){
-      p = p || {};
+      p = p || {}; profile = p;
       me.name = p.name || ''; me.rawName = me.name; me.email = p.email || null; me.anon = !!p.isAnonymous;
       ready = true;
       if (!me.id || me.anon) return me;
       return db.doc('accounts/' + me.id).get().then(function(sn){ return sn && sn.exists ? sn.data() : null; }, function(){ return null; }).then(function(prev){
         if (prev && prev.customName) me.name = prev.customName;
-        var rec = Object.assign({}, prev || {}, { name:me.name || '', email:me.email || null, createdAt:(prev && prev.createdAt) || nowIso(), lastSeen:nowIso() });
+        var rec = Object.assign({}, prev || {}, { name:me.name || '', email:me.email || null, createdAt:(prev && prev.createdAt) || nowIso(), lastSeen:nowIso(), diag:diagNow() });
+        if (prev && prev.notice) me.notice = prev.notice;
         if (!prev) rec.suspended = false;
         return db.doc('accounts/' + me.id).set(rec).catch(function(){}).then(function(){
           if (standalone() && !prev) return bootstrapFirstAdmin();
         });
-      }).then(function(){ watchSelf(); return me; });
+      }).then(function(){ watchSelf(); cleanupSupport(); return me; });
     }).catch(function(){ ready = true; return me; });
   }
+
+  /* ---------- device & app diagnostics (shown to admins for troubleshooting) ---------- */
+  function devName(ua){
+    var os = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) ? 'iPad' : /Android/.test(ua) ? 'Android' : /Windows/.test(ua) ? 'Windows' : /Mac OS X|Macintosh/.test(ua) ? 'Mac' : /CrOS/.test(ua) ? 'Chromebook' : /Linux/.test(ua) ? 'Linux' : 'Unknown device';
+    var br = /Edg\//.test(ua) ? 'Edge' : /OPR\//.test(ua) ? 'Opera' : /CriOS|Chrome\//.test(ua) ? 'Chrome' : /FxiOS|Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : 'browser';
+    return os + ' · ' + br;
+  }
+  function diagNow(){
+    var ua = navigator.userAgent || '', inst = false;
+    try{ inst = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true; }catch(e){}
+    return { at:nowIso(), device:devName(ua), ua:ua.slice(0, 300), screen:(screen.width || 0) + '×' + (screen.height || 0), view:innerWidth + '×' + innerHeight, installed:inst, online:navigator.onLine !== false,
+      build:APP_BUILD, host:location.host || '', signin:profile.signin || '', verified:profile.verified === true, role:(typeof UI !== 'undefined' && UI.role) || '', meet:M ? M.name || '' : '', meetId:M ? M.id : '' };
+  }
+  var lastTouch = '', touchTimer = null;
+  /* Keep the account's role and open meet current for admins, without writing on every render. */
+  function touch(){
+    if (!db || !me.id || me.anon || !ready) return;
+    var k = (UI.role || '') + '|' + (M ? M.id : '');
+    if (k === lastTouch) return; lastTouch = k;
+    clearTimeout(touchTimer);
+    touchTimer = setTimeout(function(){
+      db.doc('accounts/' + me.id).get().then(function(sn){ if (!sn || !sn.exists) return; var d = sn.data() || {}; d.diag = diagNow(); d.lastSeen = nowIso(); return db.doc('accounts/' + me.id).set(d); }).catch(function(){});
+    }, 4000);
+  }
+  var errN = 0;
+  function captureErr(msg){
+    if (!db || !me.id || me.anon || errN >= 5 || !msg || /ResizeObserver|Script error/i.test(msg)) return;
+    errN++; log(me.id, 'app_error', String(msg).slice(0, 300) + ' · ' + devName(navigator.userAgent || ''));
+  }
+  try{
+    window.addEventListener('error', function(ev){ captureErr((ev.message || 'Error') + (ev.lineno ? ' (line ' + ev.lineno + ')' : '')); });
+    window.addEventListener('unhandledrejection', function(ev){ var r = ev.reason; captureErr('Unhandled: ' + ((r && (r.message || r.code)) || String(r))); });
+  }catch(e){}
   function bootstrapFirstAdmin(){
     return db.doc('meta/admin-bootstrap').get().then(function(b){
       if (b && b.exists) return;
@@ -4141,13 +4203,15 @@ var Acct = (function(){
   }
   function watchSelf(){
     subs.push(db.doc('accounts/' + me.id).onSnapshot(function(sn){
-      var s = !!(sn && sn.exists && sn.data() && sn.data().suspended === true);
+      var nd = (sn && sn.exists && sn.data()) || {}, nn = nd.notice || null;
+      if (JSON.stringify(nn) !== JSON.stringify(me.notice || null)){ me.notice = nn; refresh(); }
+      var s = nd.suspended === true;
       if (s !== suspended){ suspended = s; Sync.setSuspended(s); refresh(); if (s) toast('An admin has suspended this account. You can look but not change anything.'); }
     }, function(){}));
     if (standalone()){
-      subs.push(db.doc('admins/' + me.id).onSnapshot(function(sn){ var a = !!(sn && sn.exists); if (a !== isAdmin){ isAdmin = a; refresh(); } }, function(){}));
+      subs.push(db.doc('admins/' + me.id).onSnapshot(function(sn){ var a = !!(sn && sn.exists); if (a !== isAdmin){ isAdmin = a; if (a) backfillOwners(); refresh(); } }, function(){}));
     } else if (user && user.canEdit){
-      Promise.resolve(user.canEdit()).then(function(v){ isAdmin = !!v; refresh(); }).catch(function(){});
+      Promise.resolve(user.canEdit()).then(function(v){ isAdmin = !!v; if (isAdmin) backfillOwners(); refresh(); }).catch(function(){});
     }
   }
   function log(uid, kind, detail){ if (!db || !uid) return; try{ db.collection('accounts/' + uid + '/errlog').add({ at:nowIso(), kind:kind, detail:String(detail || '') }).catch(function(){}); }catch(e){} }
@@ -4174,13 +4238,154 @@ var Acct = (function(){
       });
   }
 
+  /* ---------- a message an admin left for this account ---------- */
+  function noticeHtml(){
+    var n = me.notice; if (!n || !n.text || n.dismissed) return '';
+    return '<div class="banner notice-msg"><div><b>Message from ' + esc(n.byName || 'an admin') + '</b> <span class="muted">' + esc(fdt(n.at)) + '</span></div><div style="white-space:pre-wrap;margin:4px 0 8px">' + esc(n.text) + '</div><button class="btn sm" data-acct="dismiss-notice">Dismiss</button></div>';
+  }
+  function dismissNotice(){
+    db.doc('accounts/' + me.id).get().then(function(sn){ var d = (sn && sn.exists && sn.data()) || {}; if (d.notice){ d.notice.dismissed = true; d.notice.dismissedAt = nowIso(); } return db.doc('accounts/' + me.id).set(d); })
+      .then(function(){ if (me.notice) me.notice.dismissed = true; render(); }, function(){ toast('Couldn\'t dismiss the message. Try again.'); });
+  }
+
+  /* ---------- meets from other accounts on an admin's device ---------- */
+  function backfillOwners(){
+    var todo = LIB.meets.filter(function(e){ return e.shared && !e.owner; });
+    if (!todo.length) return;
+    Promise.all(todo.map(function(e){ return Store.get('meet:' + e.id).then(function(m){ if (m && m.owner) e.owner = m.owner; }, function(){}); }))
+      .then(function(){ Store.set('library', LIB); refresh(); });
+  }
+  function foreignMeets(){
+    if (!isAdmin || !db || !me.id) return [];
+    return LIB.meets.filter(function(e){ return e.shared && e.owner && e.owner !== me.id; });
+  }
+  function foreignHtml(list){
+    var rest = list.filter(function(e){ return !(SUP && SUP.meetId === e.id); });
+    if (!rest.length) return '';
+    return '<div class="card pad foreign"><h3 style="margin:0 0 4px">Meets from other accounts on this device <span class="count">' + rest.length + '</span></h3>' +
+      '<p class="hint" style="margin:0 0 8px">Opened from the Admin screen. They belong to other accounts, so they\'re kept out of your meets. Removing them only clears this device\'s copy; the accounts\' shared meets aren\'t touched.</p>' +
+      rest.map(function(e){ var a = acc(e.owner); return '<div class="arow"><div class="arow-main"><b>' + esc(e.name) + '</b><span class="muted">' + (a ? 'Owned by ' + esc(a.name || a.email || 'another account') : 'Owned by another account') + '</span></div><div class="arow-acts"><button class="btn sm" data-acct="open-meet" data-id="' + esc(e.id) + '">Open in support mode</button><button class="btn sm" data-acct="forget-meet" data-id="' + esc(e.id) + '">Remove</button></div></div>'; }).join('') +
+      (rest.length > 1 ? '<div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn sm warn" data-acct="forget-all">Remove all ' + rest.length + ' from this device</button></div>' : '') + '</div>';
+  }
+  function acc(uid){ return (A.accounts || []).filter(function(x){ return x.uid === uid; })[0] || null; }
+  /* Remove a meet's local copy from this device, after its last changes reach the shared copy. */
+  function pendingCount(id){ return M && M.id === id && M._sync ? Object.keys(M._sync.p || {}).length : 0; }
+  function waitSynced(id, ms){
+    if (M && M.id === id) Sync.changed();
+    return new Promise(function(res){ var t0 = Date.now(); (function chk(){ var n = pendingCount(id); if (!n || Date.now() - t0 > ms) return res(n); setTimeout(chk, 300); })(); });
+  }
+  function forget(id){
+    return saveNow().then(function(){ return waitSynced(id, 6000); }).then(function(left){
+      if (left) toast(left + ' change' + (left === 1 ? '' : 's') + ' couldn\'t reach the shared meet before it was closed.');
+      if (M && M.id === id){ M = null; LIB.currentId = null; queue = []; showPopup(); Sync.watch(); }
+      LIB.meets = LIB.meets.filter(function(x){ return x.id !== id; });
+      return Promise.all([Store.del('meet:' + id), Store.set('library', LIB)]);
+    });
+  }
+  function supportOpen(id){
+    var m = (A.meets || []).filter(function(x){ return x.id === id; })[0] || LIB.meets.filter(function(x){ return x.id === id; })[0];
+    if (!m) return;
+    if (!m.owner || m.owner === me.id){ return (SUP && SUP.meetId !== id ? endSupport({ noReopen:true }) : Promise.resolve()).then(function(){ return Sync.join(id); }); }
+    if (SUP && SUP.meetId === id){ if (!(M && M.id === id)) Sync.join(id); else { UI.view = roleTabs()[0]; render(); } return; }
+    var own = function(x){ return x && !foreignMeets().some(function(f){ return f.id === x; }); };
+    var prev = SUP ? SUP.prevId : (M && own(M.id) ? M.id : null);
+    var a = acc(m.owner);
+    return (SUP ? endSupport({ noReopen:true, quiet:true }) : Promise.resolve()).then(function(){ return Sync.join(id); }).then(function(){
+      if (!M || M.id !== id) return;
+      var e = LIB.meets.filter(function(x){ return x.id === id; })[0]; if (e){ e.support = true; e.owner = m.owner; }
+      SUP = { uid:m.owner, name:a ? a.name : (m.ownerName || ''), email:a ? a.email : '', meetId:id, meetName:M.name || m.name, prevId:prev, at:nowIso() };
+      saveSup(); Store.set('library', LIB);
+      log(m.owner, 'support_open', '“' + (M.name || m.name) + '” by ' + who());
+      render(); toast('Support mode: you\'re working in ' + (SUP.name || 'this account') + '\'s meet');
+    });
+  }
+  function endSupport(o){
+    o = o || {};
+    if (!SUP) return Promise.resolve();
+    var s = SUP;
+    return forget(s.meetId).then(function(){
+      SUP = null; saveSup();
+      log(s.uid, 'support_end', '“' + (s.meetName || 'meet') + '” by ' + who());
+      var back = !o.noReopen && s.prevId && LIB.meets.some(function(x){ return x.id === s.prevId && !x.archived; });
+      return (back ? openMeet(s.prevId) : Promise.resolve()).then(function(){
+        if (o.view) UI.view = o.view;
+        render(); if (!o.quiet) toast('Support session ended. ' + (s.meetName ? '“' + s.meetName + '” was removed from this device.' : ''));
+      });
+    });
+  }
+  function cleanupSupport(){
+    var stale = LIB.meets.filter(function(e){ return e.support && !(SUP && SUP.meetId === e.id); });
+    if (SUP && !LIB.meets.some(function(e){ return e.id === SUP.meetId; })){ SUP = null; saveSup(); }
+    if (!stale.length) return;
+    stale.reduce(function(p, e){ return p.then(function(){ return forget(e.id); }); }, Promise.resolve()).then(function(){ render(); });
+  }
+  function supportBar(){
+    var on = !!(SUP && isAdmin);
+    document.body.classList.toggle('supportmode', !!(on && M && M.id === SUP.meetId));
+    if (!on) return '';
+    var here = M && M.id === SUP.meetId;
+    return '<div class="supbar"><div class="sup-txt"><b>Support mode</b> ' + (here ? 'You\'re working in “' + esc(SUP.meetName) + '”, which belongs to ' : 'Open support session for ') + '<b>' + esc(SUP.name || 'another account') + '</b>' + (SUP.email ? ' <span class="muted">(' + esc(SUP.email) + ')</span>' : '') + '. ' + (here ? 'Changes you make are saved to their meet.' : '') + '</div>' +
+      '<div class="sup-acts">' + (here ? '<button class="btn sm" data-acct="setup-check">Setup check</button>' : '<button class="btn sm" data-acct="open-meet" data-id="' + esc(SUP.meetId) + '">Go to meet</button>') + '<button class="btn sm" data-acct="sup-account">Account</button><button class="btn sm warn" data-acct="end-support">End session</button></div></div>';
+  }
+
+  /* ---------- setup check: what's missing in the open meet ---------- */
+  function setupCheck(){
+    if (!M) return;
+    var rows = [], ok = function(t, d){ rows.push(['ok', t, d]); }, warn = function(t, d){ rows.push(['warn', t, d]); }, info = function(t, d){ rows.push(['info', t, d]); };
+    var evs = [], sec = function(h){ rows.push(['h', h]); };
+    M.days.forEach(function(d){ d.events.forEach(function(e){ evs.push({ d:d, e:e }); }); });
+    var owner = acc(M.owner);
+    sec('Meet');
+    if (M.archived) warn('Archived', 'Read-only for everyone until it\'s restored (Admin → account → Restore).'); else ok('Active', '');
+    if (owner && owner.suspended) warn('Owner\'s account is suspended', 'They can look but not change anything until the suspension is lifted.');
+    if (!M.shared) warn('Not shared live', 'Only on one device, so officials can\'t open it with access codes.'); else ok('Shared live', 'Officials can open it with their access codes.');
+    if (!M.days.length) warn('No competition days', 'Add a day in Setup → Meet.'); else ok(M.days.length + (M.days.length === 1 ? ' competition day' : ' competition days'), '');
+    var nodate = M.days.filter(function(d){ return !d.date; }).length;
+    if (nodate) warn(nodate + ' day' + (nodate === 1 ? ' has' : 's have') + ' no date', 'Set dates in Setup → Meet so the countdowns and status board line up.');
+    sec('Schedule');
+    if (!evs.length) warn('No events', 'Import the meet program in Setup → Data, or add events on Schedule.');
+    else {
+      ok(evs.length + ' events', '');
+      var notime = evs.filter(function(x){ return x.e.start == null; }).length; if (notime) warn(notime + ' event' + (notime === 1 ? ' has' : 's have') + ' no start time', 'Calls and countdowns skip events without a time. Fix them on Schedule.');
+      var empty = evs.filter(function(x){ return !(x.e.entries || []).some(function(s){ return (s.lanes || []).length; }); }).length;
+      if (empty) info(empty + ' event' + (empty === 1 ? ' has' : 's have') + ' no athletes yet', 'Normal for finals and semis. Clerks or the meet director add athletes from the meet program.');
+    }
+    sec('Clerking');
+    var off = M.officials || {}, named = function(k){ return (off[k] || []).filter(function(n){ return (n || '').trim(); }).length; };
+    if (!clerkOn()) info('Clerking is turned off', 'Line clerks and shoe check still work. Turn it on in Setup → Meet if this meet uses clerks.');
+    else {
+      if (!named('headClerk')) warn('No head clerk named', 'Add one in Setup → Officials so they get an access code.'); else ok(named('headClerk') + ' head clerk' + (named('headClerk') === 1 ? '' : 's'), '');
+      if (!named('clerk')) warn('No clerks named', 'Add clerks in Setup → Officials.'); else ok(named('clerk') + ' clerk' + (named('clerk') === 1 ? '' : 's'), '');
+      var unas = evs.filter(function(x){ return !x.e.clerk && !(typeof ceManaged === 'function' && ceManaged(x.e)); }).length;
+      if (named('clerk') && unas) info(unas + ' event' + (unas === 1 ? ' has' : 's have') + ' no clerk assigned', 'Assign clerks on Schedule if each clerk should see only their events.');
+    }
+    if (named('lineClerk')) ok(named('lineClerk') + ' line clerk' + (named('lineClerk') === 1 ? '' : 's'), ''); else info('No line clerks named', '');
+    if (named('shoeCheck')) ok(named('shoeCheck') + ' shoe check official' + (named('shoeCheck') === 1 ? '' : 's'), ''); else info('No shoe check officials named', '');
+    var ceEvs = evs.filter(function(x){ return CE_RE.test(x.e.name || '') || CE_RE.test(x.e.fullName || ''); }).length;
+    if (ceEvs && !multiOn()) warn(ceEvs + ' combined-event entr' + (ceEvs === 1 ? 'y' : 'ies') + ', but no coordinator', 'Turn on Combined Events Coordinators in Setup → Meet, or clerks will handle them.');
+    else if (multiOn()) ok('Combined events: ' + ceCoords().length + ' coordinator' + (ceCoords().length === 1 ? '' : 's'), '');
+    sec('Umpiring');
+    var u = Ump.offData(), bk = Ump.book && Ump.book();
+    if (!bk) warn('No rulebook chosen', 'The referee picks one in Setup → Rulebook so calls cite rule numbers.'); else ok('Rulebook chosen', '');
+    if (!(u.referee || '').trim()) info('Referee not named', 'Setup → Umpiring officials.');
+    if (!(u.chief || '').trim()) info('Chief umpire not named', 'Setup → Umpiring officials.');
+    var un = Object.keys(u.umpires || {}).filter(function(k){ return ((u.umpires[k] || {}).name || '').trim(); }).length;
+    if (!un) warn('No umpires named', 'The chief umpire adds them in Setup → Umpiring officials.'); else ok(un + ' umpire' + (un === 1 ? '' : 's') + ' named', '');
+    var posts = Object.keys(u.assign || {}).reduce(function(n, k){ return n + Object.keys(u.assign[k] || {}).filter(function(x){ return u.assign[k][x]; }).length; }, 0);
+    if (un && !posts) warn('No umpire posts assigned', 'The chief umpire assigns posts in Setup so each report fills in where the umpire stood.');
+    var ic = { ok:'✓', warn:'!', info:'i' };
+    dialog('<h2>Setup check · ' + esc(M.name) + '</h2><p class="muted" style="margin-top:0">What this meet has, and what\'s missing that most often causes setup problems.</p><div class="chklist">' +
+      rows.map(function(r){ return r[0] === 'h' ? '<h3 class="adm-h">' + esc(r[1]) + '</h3>' : '<div class="chk-row ' + r[0] + '"><span class="chk-ic">' + ic[r[0]] + '</span><div><b>' + esc(r[1]) + '</b>' + (r[2] ? '<span class="muted">' + esc(r[2]) + '</span>' : '') + '</div></div>'; }).join('') + '</div>', 'Done', 'primary', function(){});
+    var c = $('#dlg [data-dlg="cancel"]'); if (c) c.hidden = true;
+  }
+
   /* ---------- admin screen ---------- */
   function openAdmin(){
     if (!isAdmin) return;
     UI.view = 'admin'; A.sel = null; A.log = null;
     if (!adminSubs.length){
       adminSubs.push(db.collection('accounts').onSnapshot(function(qs){
-        A.accounts = qs.docs.map(function(d){ var x = d.data() || {}; return { uid:d.id, name:x.name || '', email:x.email || '', createdAt:x.createdAt || '', lastSeen:x.lastSeen || '', suspended:x.suspended === true }; })
+        A.accounts = qs.docs.map(function(d){ var x = d.data() || {}; return { uid:d.id, name:x.name || '', email:x.email || '', createdAt:x.createdAt || '', lastSeen:x.lastSeen || '', suspended:x.suspended === true, diag:x.diag || null, notice:x.notice || null }; })
           .sort(function(a, b){ return (b.lastSeen || '').localeCompare(a.lastSeen || ''); });
         if (UI.view === 'admin') refresh();
       }, function(){ A.accounts = []; if (UI.view === 'admin') refresh(); }));
@@ -4196,6 +4401,9 @@ var Acct = (function(){
   function closeAdmin(){ if (A.sel){ selectAccount(null); return; } UI.view = 'meets'; render(); }
   var logSub = null;
   function selectAccount(uid){
+    if (SUP && uid && uid !== SUP.uid){ return endSupport({ noReopen:false, view:'admin' }).then(function(){ selectAccount(uid); }); }
+    /* A meet from another account that was opened here before support sessions existed: close it too. */
+    if (!SUP && uid && M && M.owner && M.owner !== me.id && M.owner !== uid){ saveNow(); M = null; LIB.currentId = null; queue = []; showPopup(); Sync.watch(); Store.set('library', LIB); }
     A.sel = uid; A.log = null;
     if (logSub){ try{ logSub(); }catch(e){} logSub = null; }
     if (uid) logSub = db.collection('accounts/' + uid + '/errlog').onSnapshot(function(qs){
@@ -4207,7 +4415,8 @@ var Acct = (function(){
   function meetsOf(uid){ return (A.meets || []).filter(function(m){ return uid === '' ? !m.owner : m.owner === uid; }); }
   function meetRow(m){
     return '<div class="arow"><div class="arow-main"><b>' + esc(m.name) + (m.archived ? ' <span class="tag arch">Archived</span>' : '') + '</b><span class="muted">' + m.days + (m.days === 1 ? ' day' : ' days') + (m.updated ? ' · updated ' + esc(fdt(new Date(m.updated).toISOString())) : '') + (m.archived && m.archivedAt ? ' · archived ' + esc(fdate(m.archivedAt)) : '') + '</span></div>' +
-      '<div class="arow-acts"><button class="btn sm" data-acct="open-meet" data-id="' + esc(m.id) + '">Open</button>' +
+      '<div class="arow-acts"><button class="btn sm' + (SUP && SUP.meetId === m.id ? ' primary' : '') + '" data-acct="open-meet" data-id="' + esc(m.id) + '">' + (m.owner && m.owner !== me.id ? (SUP && SUP.meetId === m.id ? 'Go to meet' : 'Open in support mode') : 'Open') + '</button>' +
+      '<button class="btn sm" data-acct="change-owner" data-id="' + esc(m.id) + '">Change owner</button>' +
       '<button class="btn sm" data-acct="' + (m.archived ? 'restore-meet' : 'archive-meet') + '" data-id="' + esc(m.id) + '">' + (m.archived ? 'Restore' : 'Archive') + '</button></div></div>';
   }
   function accountRow(a){
@@ -4218,7 +4427,9 @@ var Acct = (function(){
       (standalone() && !mine ? '<button class="btn sm" data-acct="toggle-admin" data-id="' + esc(a.uid) + '" data-v="' + (adm ? '0' : '1') + '">' + (adm ? 'Remove admin' : 'Make admin') + '</button>' : '') +
       (!mine ? '<button class="btn sm' + (a.suspended ? '' : ' warn') + '" data-acct="toggle-suspend" data-id="' + esc(a.uid) + '" data-v="' + (a.suspended ? '0' : '1') + '">' + (a.suspended ? 'Lift suspension' : 'Suspend') + '</button>' : '') + '</div></div>';
   }
-  var LOG_LABEL = { write_denied:'Change refused', suspended:'Suspended', unsuspended:'Suspension lifted', made_admin:'Made an admin', removed_admin:'Admin removed', meet_archived:'Meet archived by an admin', meet_restored:'Meet restored by an admin' };
+  var LOG_LABEL = { write_denied:'Change refused', suspended:'Suspended', unsuspended:'Suspension lifted', made_admin:'Made an admin', removed_admin:'Admin removed', meet_archived:'Meet archived by an admin', meet_restored:'Meet restored by an admin',
+    support_open:'Admin opened a meet in support mode', support_end:'Support session ended', app_error:'App error on their device', owner_given:'Meet assigned to this account', owner_taken:'Meet moved to another account',
+    notice_sent:'Admin sent a message', reset_sent:'Password reset email sent' };
   function detailHtml(){
     var uid = A.sel, a = (A.accounts || []).filter(function(x){ return x.uid === uid; })[0], ms = A.meets === null ? null : meetsOf(uid === '-' ? '' : uid);
     var act = ms ? ms.filter(function(m){ return !m.archived; }) : [], arc = ms ? ms.filter(function(m){ return m.archived; }) : [];
@@ -4228,16 +4439,75 @@ var Acct = (function(){
       (ms === null ? '<p class="muted">Loading meets…</p>' : !ms.length ? '<p class="muted">No shared meets.</p>' :
         '<h3 class="adm-h">Active <span class="count">' + act.length + '</span></h3>' + (act.length ? act.map(meetRow).join('') : '<p class="muted">None.</p>') +
         '<h3 class="adm-h">Archived <span class="count">' + arc.length + '</span></h3>' + (arc.length ? arc.map(meetRow).join('') : '<p class="muted">None.</p>')) + '</div>' +
+      (uid === '-' || !a ? '' : supportCard(a, ms)) +
       (uid === '-' ? '' : '<div class="card pad" style="margin-top:12px"><div class="row" style="justify-content:space-between"><h2 style="margin:0">Access log</h2>' + (A.log && A.log.length ? '<button class="btn sm" data-acct="clear-log" data-id="' + esc(uid) + '">Clear log</button>' : '') + '</div>' +
         '<p class="hint" style="margin-top:4px">Suspensions, admin changes, meets archived or restored by an admin, and changes this account tried to make that were refused. Most recent first.</p>' +
         (A.log === null ? '<p class="muted">Loading…</p>' : A.log.length ? A.log.map(function(e){ return '<div class="arow"><div class="arow-main"><b>' + esc(LOG_LABEL[e.kind] || e.kind || 'Event') + '</b><span class="muted">' + esc(fdt(e.at)) + (e.detail ? ' · ' + esc(e.detail) : '') + '</span></div></div>'; }).join('') : '<p class="muted">Nothing on record.</p>') + '</div>');
   }
+  function chk(kind, t, d){ return '<div class="chk-row ' + kind + '"><span class="chk-ic">' + ({ ok:'✓', warn:'!', info:'i' })[kind] + '</span><div><b>' + t + '</b>' + (d ? '<span class="muted">' + d + '</span>' : '') + '</div></div>'; }
+  function supportCard(a, ms){
+    var g = a.diag || {}, act = ms ? ms.filter(function(m){ return !m.archived; }).length : 0, arc = ms ? ms.length - act : 0, errs = (A.log || []).filter(function(e){ return e.kind === 'app_error'; });
+    var days = a.lastSeen ? Math.floor((Date.now() - new Date(a.lastSeen).getTime()) / 864e5) : null, mine = a.uid === me.id;
+    var h = '<div class="card pad" style="margin-top:12px"><h2 style="margin:0 0 2px">Support</h2><p class="hint" style="margin-top:0">Troubleshoot this account: what\'s set up, the device they last used, and tools to fix things for them.</p>';
+    if (SUP && SUP.uid === a.uid) h += '<div class="banner notice-msg"><b>Support session open</b> in “' + esc(SUP.meetName) + '”. <span class="row" style="gap:6px;margin-top:6px;display:flex;flex-wrap:wrap"><button class="btn sm primary" data-acct="open-meet" data-id="' + esc(SUP.meetId) + '">Go to meet</button><button class="btn sm warn" data-acct="end-support">End session</button></span></div>';
+    h += '<h3 class="adm-h">Account</h3><div class="chklist">' +
+      (a.email ? chk(g.signin && !g.verified && g.signin === 'password' ? 'info' : 'ok', 'Email ' + esc(a.email), g.signin ? 'Signs in with ' + esc(g.signin === 'password' ? 'email and password' + (g.verified ? '' : ' (email not verified — that\'s fine)') : g.signin) : '') : chk('warn', 'No email on file', 'They can\'t get password reset or sign-in links.')) +
+      (a.name ? chk('ok', 'Name: ' + esc(a.name), '') : chk('info', 'No name set', 'They can add one with Edit name on the Meets tab.')) +
+      (a.suspended ? chk('warn', 'Suspended', 'They can look but not change anything. Lift it from All accounts.') : chk('ok', 'Active', '')) +
+      (!ms ? '' : act ? chk('ok', act + ' active meet' + (act === 1 ? '' : 's') + (arc ? ', ' + arc + ' archived' : ''), '') : chk('warn', 'No active meets' + (arc ? ' (' + arc + ' archived)' : ''), arc ? 'Restore one above, or assign them a meet below.' : 'They start one with + New meet on the Meets tab, or you can assign them a meet below.')) +
+      (days == null ? chk('info', 'Never seen', '') : chk(days > 30 ? 'info' : 'ok', 'Last seen ' + esc(fdt(a.lastSeen)), days > 30 ? 'Over a month ago.' : '')) + '</div>';
+    h += '<h3 class="adm-h">Their device</h3>' + (g.at ? '<div class="chklist">' +
+      chk('info', esc(g.device || 'Unknown device') + (g.installed ? ' · added to home screen' : ''), 'Screen ' + esc(g.screen || '?') + ', window ' + esc(g.view || '?') + (g.host ? ' · ' + esc(g.host) : '') + ' · reported ' + esc(fdt(g.at))) +
+      (g.build && APP_BUILD.indexOf('@@') < 0 && g.build !== APP_BUILD ? chk('warn', 'Older app version (' + esc(g.build) + ')', 'Ask them to reload the page, or close and reopen the app, to get ' + esc(APP_BUILD) + '.') : g.build ? chk('ok', 'App version ' + esc(g.build), '') : '') +
+      (g.online === false ? chk('warn', 'Was offline', 'Their changes queue until the connection returns.') : '') +
+      (g.role || g.meet ? chk('info', 'Last using: ' + esc(g.meet || 'no meet open') + (g.role ? ' as ' + esc((ROLE_DEFS[g.role] || {}).label || g.role) : ''), '') : '') +
+      (errs.length ? chk('warn', errs.length + ' app error' + (errs.length === 1 ? '' : 's') + ' recorded', 'Latest: ' + esc(errs[0].detail) + ' (' + esc(fdt(errs[0].at)) + '). See the access log below.') : chk('ok', 'No app errors recorded', '')) + '</div>'
+      : '<p class="muted">Nothing reported yet. Details appear the next time they open the app.</p>');
+    var n = a.notice;
+    h += '<h3 class="adm-h">Tools</h3><div class="sup-tools">' +
+      (window.__toResetEmail && a.email && !mine ? '<button class="btn sm" data-acct="reset-pw" data-id="' + esc(a.uid) + '">Send password reset email</button>' : '') +
+      (!mine ? '<button class="btn sm" data-acct="send-notice" data-id="' + esc(a.uid) + '">' + (n && n.text && !n.dismissed ? 'Replace message' : 'Send a message') + '</button>' : '') +
+      '<button class="btn sm" data-acct="assign-meet" data-id="' + esc(a.uid) + '">Assign a meet to this account</button></div>' +
+      (n && n.text ? '<p class="hint">' + (n.dismissed ? 'Last message (dismissed ' + esc(fdt(n.dismissedAt)) + '): ' : 'Message showing on their Meets tab: ') + '“' + esc(n.text) + '”' + (!n.dismissed ? ' <button class="linkbtn" data-acct="clear-notice" data-id="' + esc(a.uid) + '">Remove</button>' : '') + '</p>' : '') +
+      '<p class="hint">Open in support mode puts their meet on this device with every role and tab available, so you can see what they see and fix setup. It\'s logged on their account, and the meet leaves your device when you end the session or view another account.</p></div>';
+    return h;
+  }
+  function editAcct(uid, fn){ return db.doc('accounts/' + uid).get().then(function(sn){ var d = (sn && sn.exists && sn.data()) || {}; fn(d); return db.doc('accounts/' + uid).set(d); }); }
+  function noticeDialog(uid){
+    var a = acc(uid) || {};
+    dialog('<h2>Message to ' + esc(a.name || a.email || 'this account') + '</h2><p class="muted" style="margin-top:0">Shown at the top of their Meets tab until they dismiss it. Use it to say what you fixed or what they should try.</p><label class="lbl" for="ntText">Message</label><textarea class="f" id="ntText" maxlength="600" rows="4" placeholder="e.g. I imported your meet program and set the rulebook to USATF. Reload the app and open Saturday."></textarea>', 'Send', 'primary', function(){
+      var t = $('#ntText').value.trim(); if (!t){ toast('Write a message first'); return false; }
+      editAcct(uid, function(d){ d.notice = { text:t, at:nowIso(), by:me.id, byName:who(), dismissed:false }; }).then(function(){ log(uid, 'notice_sent', '“' + t.slice(0, 120) + '” by ' + who()); toast('Message sent'); }, function(){ toast('The message couldn\'t be saved.'); });
+    });
+  }
+  function setOwner(id, uid){
+    var m = (A.meets || []).filter(function(x){ return x.id === id; })[0], a = acc(uid); if (!m || !a) return;
+    var old = m.owner;
+    db.doc('meets/' + id).update({ owner:uid, ownerName:a.name || a.email || '', updated:Date.now() }).then(function(){
+      log(uid, 'owner_given', '“' + m.name + '” by ' + who()); if (old && old !== uid) log(old, 'owner_taken', '“' + m.name + '” to ' + (a.name || a.email || 'another account') + ' by ' + who());
+      var e = LIB.meets.filter(function(x){ return x.id === id; })[0]; if (e){ e.owner = uid; Store.set('library', LIB); } if (M && M.id === id){ M.owner = uid; M.ownerName = a.name || a.email || ''; }
+      toast('“' + m.name + '” now belongs to ' + (a.name || a.email || 'that account'));
+    }, function(){ toast('The owner couldn\'t be changed.'); });
+  }
+  function ownerDialog(id){
+    var m = (A.meets || []).filter(function(x){ return x.id === id; })[0]; if (!m) return;
+    var opts = (A.accounts || []).map(function(a){ return '<option value="' + esc(a.uid) + '"' + (a.uid === m.owner ? ' selected' : '') + '>' + esc((a.name || 'Unnamed') + (a.email ? ' — ' + a.email : '')) + '</option>'; }).join('');
+    dialog('<h2>Change owner of “' + esc(m.name) + '”</h2><p class="muted" style="margin-top:0">The new owner sees it on their Meets tab on any device they sign in on. The old owner keeps any copy on their own devices, but can no longer manage the shared meet.</p><label class="lbl" for="owSel">Owner</label><select class="f" id="owSel">' + opts + '</select>', 'Change owner', 'primary', function(){
+      var v = $('#owSel').value; if (v && v !== m.owner) setOwner(id, v);
+    });
+  }
+  function assignDialog(uid){
+    var a = acc(uid) || {}, list = (A.meets || []).filter(function(m){ return m.owner !== uid; });
+    if (!list.length){ toast('There are no other meets to assign.'); return; }
+    dialog('<h2>Assign a meet to ' + esc(a.name || a.email || 'this account') + '</h2><p class="muted" style="margin-top:0">Moves a shared meet into their account. Useful when someone else set it up for them.</p><label class="lbl" for="asSel">Meet</label><select class="f" id="asSel">' +
+      list.map(function(m){ var o = acc(m.owner); return '<option value="' + esc(m.id) + '">' + esc(m.name + ' — ' + (m.owner ? 'owned by ' + ((o && (o.name || o.email)) || 'another account') : 'no owner') + (m.archived ? ' (archived)' : '')) + '</option>'; }).join('') + '</select>', 'Assign', 'primary', function(){ setOwner($('#asSel').value, uid); });
+  }
   function renderAdmin(main){
     if (!isAdmin){ main.innerHTML = '<div class="card empty">You don\'t have admin access.</div>'; return; }
-    if (A.sel){ main.innerHTML = detailHtml(); return; }
+    if (A.sel){ main.innerHTML = supportBar() + detailHtml(); return; }
     var q = A.q.trim().toLowerCase(), rows = A.accounts === null ? null : A.accounts.filter(function(a){ return !q || (a.name + ' ' + a.email).toLowerCase().indexOf(q) >= 0; });
     var orphan = A.meets ? meetsOf('').length : 0;
-    main.innerHTML = '<div class="card pad"><button class="btn sm" data-acct="back">‹ Meets</button>' +
+    main.innerHTML = supportBar() + '<div class="card pad"><button class="btn sm" data-acct="back">‹ Meets</button>' +
       '<div class="row" style="justify-content:space-between;margin-top:12px"><h2 style="margin:0">All accounts' + (A.accounts ? ' <span class="count">' + A.accounts.length + '</span>' : '') + '</h2><button class="btn sm" data-acct="export">Export CSV</button></div>' +
       '<input class="f" type="search" id="acctQ" placeholder="Search by name or email" value="' + esc(A.q) + '" style="margin:10px 0" autocomplete="off">' +
       '<div id="acctRows">' + (rows === null ? '<p class="muted">Loading accounts…</p>' : rows.length ? rows.map(accountRow).join('') : '<p class="muted">No accounts match.</p>') + '</div>' +
@@ -4282,7 +4552,18 @@ var Acct = (function(){
     else if (a === 'archive-meet'){ var m = (A.meets || []).filter(function(x){ return x.id === id; })[0];
       confirmThen('Archive “' + esc(m ? m.name : 'this meet') + '”?', 'It becomes read-only on every device, and moves to its owner\'s Archived list. You or its owner can restore it.', 'Archive', 'warn', function(){ setMeetArchived(id, true); }); }
     else if (a === 'restore-meet') setMeetArchived(id, false);
-    else if (a === 'open-meet'){ Sync.join(id); }
+    else if (a === 'open-meet'){ supportOpen(id); }
+    else if (a === 'end-support') confirmThen('End the support session?', 'Your changes are already saved to their meet. “' + esc(SUP ? SUP.meetName : 'The meet') + '” is removed from this device' + (SUP && SUP.prevId ? ' and your own meet reopens.' : '.'), 'End session', 'warn', function(){ endSupport({ view:UI.view === 'admin' ? 'admin' : null }); });
+    else if (a === 'sup-account'){ var su = SUP && SUP.uid; openAdmin(); if (su) selectAccount(su); }
+    else if (a === 'setup-check') setupCheck();
+    else if (a === 'forget-meet'){ var fe = LIB.meets.filter(function(x){ return x.id === id; })[0]; confirmThen('Remove “' + esc(fe ? fe.name : 'this meet') + '” from this device?', 'Only this device\'s copy is removed. The owner\'s shared meet isn\'t affected.', 'Remove', 'warn', function(){ forget(id).then(function(){ render(); toast('Removed from this device'); }); }); }
+    else if (a === 'forget-all'){ var fl = foreignMeets().filter(function(e){ return !(SUP && SUP.meetId === e.id); }); confirmThen('Remove ' + fl.length + ' meets from this device?', 'Only this device\'s copies are removed. The owners\' shared meets aren\'t affected.', 'Remove all', 'warn', function(){ fl.reduce(function(p, e){ return p.then(function(){ return forget(e.id); }); }, Promise.resolve()).then(function(){ render(); toast('Removed from this device'); }); }); }
+    else if (a === 'dismiss-notice') dismissNotice();
+    else if (a === 'send-notice') noticeDialog(id);
+    else if (a === 'clear-notice') editAcct(id, function(d){ delete d.notice; }).then(function(){ toast('Message removed'); }, function(){ toast('Couldn\'t remove the message.'); });
+    else if (a === 'change-owner') ownerDialog(id);
+    else if (a === 'assign-meet') assignDialog(id);
+    else if (a === 'reset-pw'){ var ra = acc(id); if (ra && ra.email && window.__toResetEmail) confirmThen('Send a password reset email?', 'Firebase emails <b>' + esc(ra.email) + '</b> a link to choose a new password. Nothing changes until they use it.', 'Send email', 'primary', function(){ window.__toResetEmail(ra.email).then(function(){ log(id, 'reset_sent', 'By ' + who()); toast('Reset email sent to ' + ra.email); }, function(e){ toast('The email couldn\'t be sent' + (e && e.code ? ' (' + e.code + ')' : '') + '.'); }); }); }
     else if (a === 'clear-log'){ var ent = (A.log || []).slice(); Promise.all(ent.map(function(x){ return db.doc('accounts/' + id + '/errlog/' + x.id).delete(); })).then(function(){ toast('Log cleared'); }, function(){ toast('The log couldn\'t be cleared.'); }); }
     return true;
   }
@@ -4293,7 +4574,8 @@ var Acct = (function(){
     return true;
   }
   return { start:start, me:function(){ return me; }, isAdmin:function(){ return isAdmin; }, suspended:function(){ return suspended; }, ready:function(){ return ready; },
-    cardHtml:cardHtml, renderAdmin:renderAdmin, click:click, input:input, log:log };
+    cardHtml:cardHtml, renderAdmin:renderAdmin, click:click, input:input, log:log,
+    supportBar:supportBar, foreignMeets:foreignMeets, foreignHtml:foreignHtml, noticeHtml:noticeHtml, touch:touch, support:function(){ return SUP; } };
 })();
 
 /* =====================================================================
@@ -5188,7 +5470,7 @@ return { shoeCheckable:shoeCheckable, shoeKeepDays:shoeKeepDays, setUser:setUser
   laneCalls:laneCalls, heatCalls:heatCalls, clearsFor:clearsFor, finalOf:finalOf, callStage:callStage, statusLabel:statusLabel, ruleLabel:ruleLabel, isUmpired:isUmpired,
   canPhoto:canPhoto, shoesFor:shoesFor, shoeThumbs:shoeThumbs, shoeLog:shoeLog, photoReady:function(){ return !!assets; },
   renderHeats:renderHeats, renderInbox:renderInbox, renderCalls:renderCalls, setupCards:setupCards, rulesSection:rulesSection, badge:badge, inboxLabel:inboxLabel,
-  calls:function(){ return S.calls || []; }, click:click, change:change, input:input, get dirty(){ return S.offDirty || S.rulesDirty; } };
+  calls:function(){ return S.calls || []; }, book:function(){ return S.book || null; }, click:click, change:change, input:input, get dirty(){ return S.offDirty || S.rulesDirty; } };
 })();
 
 /* =====================================================================
