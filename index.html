@@ -957,6 +957,10 @@ body.supportmode header.top{box-shadow:inset 0 -4px 0 #E08A00}
 .banner.notice-msg{background:#E8F1FB;border-left:5px solid #2F6FB3}
 .card.foreign{margin-bottom:16px;border:1px dashed var(--line)}
 .modal{max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);overflow:auto;-webkit-overflow-scrolling:touch}
+.contact-row{align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:14px;flex-wrap:wrap}
+.applogo span.appver,.appver{flex:0 0 auto;overflow:visible;text-overflow:clip;font-family:var(--body,inherit);font-size:11px;font-weight:700;letter-spacing:.04em;color:rgba(255,255,255,.85);background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.22);border-radius:999px;padding:1px 7px;line-height:1.5;white-space:nowrap}
+.gate-brand .appver{color:inherit;background:rgba(0,0,0,.06);border-color:rgba(0,0,0,.12)}
+@media (max-width:420px){.applogo span.appver,.appver{font-size:10px;padding:0 5px;letter-spacing:.02em}}
 
 </style>
 <script>
@@ -1125,7 +1129,7 @@ body.supportmode header.top{box-shadow:inset 0 -4px 0 #E08A00}
   function gate(a){
     if (gateEl) return;
     gateEl = document.createElement('div'); gateEl.className = 'gate';
-    gateEl.innerHTML = '<div class="gate-card" role="dialog" aria-modal="true" aria-labelledby="gT"><div class="gate-brand">' + (function(){ var i = document.querySelector('.applogo img'); return i ? '<img src="' + i.src + '" alt="">' : ''; })() + '<span>Track Official</span></div><h2 id="gT">Sign in</h2>' +
+    gateEl.innerHTML = '<div class="gate-card" role="dialog" aria-modal="true" aria-labelledby="gT"><div class="gate-brand">' + (function(){ var i = document.querySelector('.applogo img'); return i ? '<img src="' + i.src + '" alt="">' : ''; })() + '<span>Track Official</span>' + (function(){ var v = document.querySelector('.appver'); return v ? '<span class="appver">' + v.textContent + '</span>' : ''; })() + '</div><h2 id="gT">Sign in</h2>' +
       '<p class="muted" style="margin:0 0 12px">Meet staff sign in with an email address. Officials who scan an access code are signed in automatically.</p>' +
       '<label class="lbl" for="gEmail">Email</label><input class="f" id="gEmail" type="email" autocomplete="email">' +
       '<label class="lbl" for="gPw" style="margin-top:10px">Password</label><input class="f" id="gPw" type="password" autocomplete="current-password">' +
@@ -1162,7 +1166,7 @@ body.supportmode header.top{box-shadow:inset 0 -4px 0 #E08A00}
 
 </script>
 <header class="top" id="hdr">
-  <div class="applogo"><img src="data:image/png;base64,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" alt="" width="44" height="44"><span>Track Official</span></div>
+  <div class="applogo"><img src="data:image/png;base64,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" alt="" width="44" height="44"><span>Track Official</span><span class="appver" title="Version 1.0.0, built 2026-11-06 09:03">v1.0.0</span></div>
   <div class="hmid">
   <div class="brand"><b id="meetName">Track Officials</b><span id="dayLabel"></span></div>
   <select class="daypick" id="dayPick" aria-label="Competition day"></select>
@@ -2717,7 +2721,7 @@ function renderMeets(main){
       '</div></div>';
   }
   var nd = Acct.suspended() || Acct.me().anon ? ' disabled' : '';
-  main.innerHTML = Acct.cardHtml() + '<div class="row" style="margin-bottom:6px"><h2 class="grow" style="margin:0">Meets</h2>' +
+  main.innerHTML = (Acct.cardHtml() || Acct.contactRow()) + '<div class="row" style="margin-bottom:6px"><h2 class="grow" style="margin:0">Meets</h2>' +
       '<button class="btn primary" id="mNew"' + nd + '>+ New meet</button><button class="btn" id="mNewP"' + nd + '>New from meet program</button><button class="btn" id="mImpJ"' + nd + '>Import backup</button></div>' +
     '<p class="hint" style="margin:0 0 14px">' + (Sync.available() ? 'Meets you share live belong to your account and open on any device you sign in on. Officials reach a meet through their access codes. ' : 'Every meet is stored on this device. ') + 'Copy last year\'s meet to start a new one with the same schedule, officials and maps. Archive finished meets to keep the list tidy — restore them any time.</p>' +
     Acct.noticeHtml() + Acct.foreignHtml(others) + Sync.meetsPanel() +
@@ -4126,7 +4130,7 @@ var Acct = (function(){
   var db = null, user = null, me = { id:null, name:'', email:null, anon:false, rawName:'' };
   var isAdmin = false, suspended = false, ready = false, subs = [], adminSubs = [];
   var A = { accounts:null, admins:null, meets:null, sel:null, log:null, q:'' };
-  var APP_BUILD = '2026-10-25 18:20', profile = {};
+  var APP_BUILD = '1.0.0', profile = {};
   /* Support session: an admin working inside another account's meet. Kept per browser tab, and the
      meet's local copy is removed from the admin's device when the session ends. */
   var SUP = (function(){ try{ return JSON.parse(sessionStorage.getItem('to.support') || 'null'); }catch(e){ return null; } })();
@@ -4219,11 +4223,51 @@ var Acct = (function(){
   /* ---------- your account (Meets tab) ---------- */
   function cardHtml(){
     if (!db || !me.id) return '';
-    if (me.anon) return '<div class="card pad acct"><div class="acct-who"><b>Guest official</b><span class="muted">Signed in from an access code. Meet staff sign in with an email account.</span></div>' + (standalone() ? '<button class="btn sm" data-acct="signout">Sign out</button>' : '') + '</div>';
+    if (me.anon) return '<div class="card pad acct"><div class="acct-who"><b>Guest official</b><span class="muted">Signed in from an access code. Meet staff sign in with an email account.</span></div>' + '<button class="btn sm" data-acct="contact">Contact Support</button>' + (standalone() ? '<button class="btn sm" data-acct="signout">Sign out</button>' : '') + '</div>';
     return '<div class="card pad acct"><span class="avatar" aria-hidden="true">' + esc((me.name || me.email || '?').trim().charAt(0).toUpperCase()) + '</span>' +
       '<div class="acct-who"><b>' + (esc(me.name) || 'Your account') + (isAdmin ? ' <span class="tag">Admin</span>' : '') + '</b><span class="muted">' + (me.email ? esc(me.email) : 'Signed in') + '</span></div>' +
-      '<div class="acct-acts"><button class="btn sm" data-acct="rename">Edit name</button>' + (isAdmin ? '<button class="btn sm primary" data-acct="admin">Admin</button>' : '') + (standalone() ? '<button class="btn sm" data-acct="signout">Sign out</button>' : '') + '</div></div>' +
+      '<div class="acct-acts"><button class="btn sm" data-acct="rename">Edit name</button><button class="btn sm" data-acct="contact">Contact Support</button>' + (isAdmin ? '<button class="btn sm primary" data-acct="admin">Admin</button>' : '') + (standalone() ? '<button class="btn sm" data-acct="signout">Sign out</button>' : '') + '</div></div>' +
       (suspended ? '<div class="banner warnb"><b>This account is suspended.</b> An admin has paused it, so you can see your meets but not change them or start new ones until it\'s lifted.</div>' : '');
+  }
+  /* ---------- Contact Support: an email to the support inbox, sent from the person's own mail app ---------- */
+  var SUPPORT_EMAIL = 'trackofficialapp@gmail.com';
+  function contactRow(){ return '<div class="row contact-row"><span class="muted grow">Questions or problems with the app?</span><button class="btn sm" data-acct="contact">Contact Support</button></div>'; }
+  function contactDialog(){
+    var em = me.email || '';
+    dialog('<h2>Contact Support</h2><p class="muted" style="margin-top:0">Writes an email to <b>' + SUPPORT_EMAIL + '</b> in your email app. Your account email and device details are added to the message so support can reply and help faster.</p>' +
+      '<label class="lbl" for="csFrom">Your email (replies go here)</label><input class="f" id="csFrom" type="email" autocomplete="email" maxlength="120" value="' + esc(em) + '"' + (em ? ' readonly' : ' placeholder="you@example.com"') + '>' +
+      '<label class="lbl" for="csTopic">Topic</label><select class="f" id="csTopic">' + ['Signing in or my account', 'Setting up a meet', 'Importing a meet program', 'Clerking or check-in', 'Umpiring or calls', 'Shoe check', 'Access codes for officials', 'Something else'].map(function(t){ return '<option>' + esc(t) + '</option>'; }).join('') + '</select>' +
+      '<label class="lbl" for="csMsg">What do you need help with?</label><textarea class="f" id="csMsg" rows="5" maxlength="1200" placeholder="What were you trying to do, and what happened instead?"></textarea>' +
+      '<p class="hint" id="csNote">Your email app opens with the message ready. Check it, then press Send there.</p>' +
+      '<div class="row" style="justify-content:flex-start;gap:6px;margin-top:4px"><button class="btn sm" id="csCopy" type="button">Copy message instead</button></div>', 'Open email', 'primary', function(){
+        var m = contactMail(); if (!m) return false;
+        if (window.top !== window){ var a = document.createElement('a'); a.href = m.href; a.target = '_blank'; a.rel = 'noopener'; document.body.appendChild(a); a.click(); a.remove(); }
+        else location.href = m.href;
+        if (db && me.id && !me.anon) log(me.id, 'support_contact', m.topic);
+        $('#csNote').innerHTML = '<b>Your email app should be open now.</b> If nothing opened, use <b>Copy message instead</b> and paste it into an email to ' + SUPPORT_EMAIL + '.';
+        return false;
+      });
+    var ok = $('#dlg [data-dlg="ok"]'), cancel = $('#dlg [data-dlg="cancel"]'); if (cancel) cancel.textContent = 'Close';
+    $('#csMsg').focus();
+    $('#csCopy').onclick = function(){
+      var m = contactMail(); if (!m) return;
+      var txt = 'To: ' + SUPPORT_EMAIL + '\nSubject: ' + m.subject + '\n\n' + m.body;
+      (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(function(){ toast('Copied. Paste it into an email to ' + SUPPORT_EMAIL); }, function(){
+        $('#csNote').innerHTML = 'Copy this into an email to <b>' + SUPPORT_EMAIL + '</b>:<textarea class="f" rows="6" readonly style="margin-top:6px">' + esc(txt) + '</textarea>';
+      });
+    };
+  }
+  function contactMail(){
+    var from = $('#csFrom').value.trim(), topic = $('#csTopic').value, msg = $('#csMsg').value.trim();
+    if (!msg){ toast('Say what you need help with first'); $('#csMsg').focus(); return null; }
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(from)){ toast('Add your email address so support can reply'); $('#csFrom').focus(); return null; }
+    var g = diagNow(), role = (typeof ROLE_DEFS !== 'undefined' && ROLE_DEFS[UI.role]) ? ROLE_DEFS[UI.role].label : (UI.role || '');
+    var subject = 'Track Official support: ' + topic + (me.name ? ' (' + me.name + ')' : '');
+    var body = msg + '\n\n— — —\nReply to: ' + from +
+      '\nName: ' + (me.name || (me.anon ? 'Guest official' : '—')) + '\nAccount email: ' + (me.email || '—') + (me.id ? '\nAccount ID: ' + me.id : '') + (isAdmin ? '\nAdmin: yes' : '') +
+      '\nMeet: ' + (M ? (M.name || 'Untitled') + ' (' + M.id + ')' + (M.shared ? ', shared' : ', this device only') : 'none open') + '\nRole: ' + (role || '—') +
+      '\nApp: ' + (g.host || 'claude.ai') + ' · version ' + g.build + '\nDevice: ' + g.device + ' · screen ' + g.screen + ', window ' + g.view + (g.installed ? ' · home-screen app' : '') + (g.online ? '' : ' · offline');
+    return { topic:topic, subject:subject, body:body, href:'mailto:' + SUPPORT_EMAIL + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body) };
   }
   function renameDialog(){
     dialog('<h2>Your name</h2><p class="muted" style="margin-top:0">Shown on your account, on the meets you own, and to admins.</p><label class="lbl" for="acName">Name</label><input class="f" id="acName" maxlength="60" autocomplete="off" value="' + esc(me.name) + '">' +
@@ -4429,7 +4473,7 @@ var Acct = (function(){
   }
   var LOG_LABEL = { write_denied:'Change refused', suspended:'Suspended', unsuspended:'Suspension lifted', made_admin:'Made an admin', removed_admin:'Admin removed', meet_archived:'Meet archived by an admin', meet_restored:'Meet restored by an admin',
     support_open:'Admin opened a meet in support mode', support_end:'Support session ended', app_error:'App error on their device', owner_given:'Meet assigned to this account', owner_taken:'Meet moved to another account',
-    notice_sent:'Admin sent a message', reset_sent:'Password reset email sent' };
+    notice_sent:'Admin sent a message', support_contact:'Contacted support', reset_sent:'Password reset email sent' };
   function detailHtml(){
     var uid = A.sel, a = (A.accounts || []).filter(function(x){ return x.uid === uid; })[0], ms = A.meets === null ? null : meetsOf(uid === '-' ? '' : uid);
     var act = ms ? ms.filter(function(m){ return !m.archived; }) : [], arc = ms ? ms.filter(function(m){ return m.archived; }) : [];
@@ -4559,6 +4603,7 @@ var Acct = (function(){
     else if (a === 'forget-meet'){ var fe = LIB.meets.filter(function(x){ return x.id === id; })[0]; confirmThen('Remove “' + esc(fe ? fe.name : 'this meet') + '” from this device?', 'Only this device\'s copy is removed. The owner\'s shared meet isn\'t affected.', 'Remove', 'warn', function(){ forget(id).then(function(){ render(); toast('Removed from this device'); }); }); }
     else if (a === 'forget-all'){ var fl = foreignMeets().filter(function(e){ return !(SUP && SUP.meetId === e.id); }); confirmThen('Remove ' + fl.length + ' meets from this device?', 'Only this device\'s copies are removed. The owners\' shared meets aren\'t affected.', 'Remove all', 'warn', function(){ fl.reduce(function(p, e){ return p.then(function(){ return forget(e.id); }); }, Promise.resolve()).then(function(){ render(); toast('Removed from this device'); }); }); }
     else if (a === 'dismiss-notice') dismissNotice();
+    else if (a === 'contact') contactDialog();
     else if (a === 'send-notice') noticeDialog(id);
     else if (a === 'clear-notice') editAcct(id, function(d){ delete d.notice; }).then(function(){ toast('Message removed'); }, function(){ toast('Couldn\'t remove the message.'); });
     else if (a === 'change-owner') ownerDialog(id);
@@ -4575,7 +4620,7 @@ var Acct = (function(){
   }
   return { start:start, me:function(){ return me; }, isAdmin:function(){ return isAdmin; }, suspended:function(){ return suspended; }, ready:function(){ return ready; },
     cardHtml:cardHtml, renderAdmin:renderAdmin, click:click, input:input, log:log,
-    supportBar:supportBar, foreignMeets:foreignMeets, foreignHtml:foreignHtml, noticeHtml:noticeHtml, touch:touch, support:function(){ return SUP; } };
+    supportBar:supportBar, contactRow:contactRow, foreignMeets:foreignMeets, foreignHtml:foreignHtml, noticeHtml:noticeHtml, touch:touch, support:function(){ return SUP; } };
 })();
 
 /* =====================================================================
