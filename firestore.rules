@@ -1,33 +1,77 @@
 rules_version = '2';
 // Security rules for Track Officials (hosted copy).
-// Meet staff sign in with an email account. Officials who scan an access code are signed in as guests:
-// a guest can work inside a meet whose id is in their code, but can't list or create meets.
+//
+// Meet staff sign in with an email account. Each shared meet has an owner (the account that shared it).
+// Officials who scan an access code are signed in as guests: they can work inside the meet named in their
+// code, but can't list, create or delete meets.
+// Admins (one admins/<uid> document each) see every account and meet, suspend accounts and archive meets.
+// The first account ever created becomes the first admin.
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
+    function uid() { return request.auth.uid; }
     function staff() { return signedIn() && request.auth.token.firebase.sign_in_provider != 'anonymous'; }
+    function isAdmin() { return signedIn() && exists(/databases/$(database)/documents/admins/$(uid())); }
+    function acct() { return /databases/$(database)/documents/accounts/$(uid()); }
+    function active() { return signedIn() && (!exists(acct()) || get(acct()).data.get('suspended', false) != true); }
+    function meetDoc(m) { return get(/databases/$(database)/documents/meets/$(m)).data; }
+    function same(f, dflt) { return request.resource.data.get(f, dflt) == resource.data.get(f, dflt); }
 
     match /meets/{meetId} {
       allow get: if signedIn();
-      allow list: if staff();
-      allow create, delete: if staff();
-      allow update: if signedIn();
+      allow list: if isAdmin() || (staff() && resource.data.owner == uid());
+      allow create: if staff() && active() && request.resource.data.owner == uid();
+      allow delete: if active() && (isAdmin() || resource.data.get('owner', null) == uid());
+      allow update: if active() && (isAdmin() || (
+        // nobody else can take a meet over; a meet shared before owners existed is claimed by the first account to save it
+        (same('owner', null) || (resource.data.get('owner', null) == null && staff() && request.resource.data.owner == uid()))
+        // only the owner archives or restores; an archived meet is read-only for everyone else
+        && (resource.data.get('owner', null) == uid() || (same('archived', false) && resource.data.get('archived', false) != true))
+      ));
       // days, maps, check-in and call marks, umpire calls, heat clears, finals, rulebook, posts, shoe checks
       match /{rest=**} {
-        allow read, write: if signedIn();
+        allow read: if signedIn();
+        allow write: if active() && (isAdmin() || meetDoc(meetId).get('archived', false) != true);
       }
     }
-    // shoe photos: anyone signed in can view; only the person who took one can remove it
+
+    // shoe photos: anyone signed in can view; only the person who took one (or an admin) can remove it
     match /photos/{photoId} {
       allow get: if signedIn();
-      allow create: if signedIn() && request.resource.data.by == request.auth.uid
+      allow create: if active() && request.resource.data.by == uid()
                     && request.resource.data.data is string && request.resource.data.data.size() < 1000000;
-      allow delete: if signedIn() && resource.data.by == request.auth.uid;
+      allow delete: if signedIn() && (resource.data.by == uid() || isAdmin());
     }
-    // display names of meet staff, shown on umpire calls and results
-    match /people/{uid} {
+
+    // display names, shown on umpire calls and results
+    match /people/{person} {
       allow read: if signedIn();
-      allow write: if signedIn() && request.auth.uid == uid;
+      allow write: if signedIn() && uid() == person;
+    }
+
+    // the account directory: everyone keeps their own entry; admins see and suspend any
+    match /accounts/{account} {
+      allow get: if signedIn() && (uid() == account || isAdmin());
+      allow list: if isAdmin();
+      allow create: if staff() && uid() == account && request.resource.data.get('suspended', false) == false;
+      allow update: if isAdmin() || (staff() && uid() == account && same('suspended', false));
+      match /errlog/{entry} {
+        allow create: if signedIn() && (uid() == account || isAdmin());
+        allow read, delete: if isAdmin();
+      }
+    }
+
+    // who is an admin
+    match /admins/{admin} {
+      allow get: if signedIn();
+      allow list: if isAdmin();
+      // an admin adds or removes others; the very first account claims admin once
+      allow create: if isAdmin() || (staff() && uid() == admin && !exists(/databases/$(database)/documents/meta/admin-bootstrap));
+      allow delete: if isAdmin() && uid() != admin;
+    }
+    match /meta/{doc} {
+      allow get: if signedIn();
+      allow create: if isAdmin();
     }
   }
 }
