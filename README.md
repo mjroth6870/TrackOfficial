@@ -60,7 +60,9 @@ In Firebase: **Authentication → Settings → Authorized domains → Add domain
 
 ### 6. First use
 1. Open the GitHub Pages address and choose **Create account** with your email and a password.
-   **The first account ever created becomes the admin**, so do this yourself before sharing the address.
+   Before version 1.3 the first account ever created became the admin. From 1.3 the rules no longer allow
+   that: on a brand-new project, add your account as admin by hand in Firestore (collection `admins`,
+   document ID = your user ID from Authentication, any field such as `note: "first admin"`).
 2. Pick **Meet Director**. A new account starts with no meets. Create one or import a meet program;
    new meets are shared live automatically and belong to your account.
 3. Use **Access** to give each official their QR code. Officials who scan one are signed in as a guest
@@ -115,7 +117,23 @@ Deleting accounts or meets isn't done from the app. To remove a login entirely, 
 
 ## Who can do what (firestore.rules)
 - **Meet staff** (email accounts): see and manage only the meets they own; open other meets through access codes.
-- **Guest officials** (from an access code): work in the meet named in their code. They can't list, create or delete meets.
+- **Guest officials** (from an access code): work in the meet named in their code, and only on what their position needs.
+  They can't list, create or delete meets. From version 1.3 every code carries a secret
+  (`meets/<meet>/codes/<position>`); a device proves it once (`meets/<meet>/members/<user>`) and the rules check its
+  position on every change:
+  | Position | Can change |
+  |---|---|
+  | Meet Director, Referee, Head Clerk | meet setup, schedule, maps (Referee: not check-in) |
+  | Clerk, Combined Events | schedule entries, check-in and call marks |
+  | Line Clerk | check-in, staging and call marks |
+  | Umpire | report calls, withdraw their own, mark heats clear |
+  | Chief Umpire / Assistant | close a call, record an L, send to the referee; heat clears; finals |
+  | Referee | every call decision and protest |
+  | Timing | finals |
+  | Lap Counter | their own lap counts |
+  | Shoe Check | shoe checks and shoe photos |
+  The owner and admins can change everything. **New codes for everyone** on the Access tab replaces the secrets:
+  old codes, and devices that joined with them, stop working. Codes made before 1.3 no longer work.
 - **Admins**: see every account and meet, suspend accounts, archive and restore any meet, add or remove admins.
 - **Suspended accounts** and **archived meets** can't be changed (admins can still restore them).
 - **Shoe photos:** anyone signed in can view them; only the person who took a photo, or an admin, can remove it.
